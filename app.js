@@ -292,16 +292,46 @@ async function renderManage(panelEl) {
   });
 }
 
+// League filter for the fixtures view. The choice (a competition code, or '' for All leagues) persists in localStorage.
+const LEAGUE_KEY = 'stakeless.league';
+const LEAGUE_FILTER = [
+  ['', 'All leagues'],
+  ['PL', 'Premier League'],
+  ['PD', 'La Liga'],
+  ['SA', 'Serie A'],
+  ['BL1', 'Bundesliga'],
+  ['FL1', 'Ligue 1'],
+  ['CL', 'Champions League'],
+  ['DED', 'Eredivisie'],
+  ['PPL', 'Primeira Liga'],
+];
+let fixtureData = null;
+function savedLeague() {
+  let v = '';
+  try { v = localStorage.getItem(LEAGUE_KEY) || ''; } catch (e) { v = ''; }
+  return LEAGUE_FILTER.some(([code]) => code === v) ? v : '';
+}
+
 async function renderFixtures() {
-  const { fixtures, source, notice, mine } = await api(`/api/rooms/${current.code}/fixtures?member=${current.memberId}`);
-  setBadge(source, notice);
+  fixtureData = await api(`/api/rooms/${current.code}/fixtures?member=${current.memberId}`);
+  setBadge(fixtureData.source, fixtureData.notice);
+  drawFixtures();
+}
+
+// Draws the league dropdown plus the fixture cards from the last fetch. Changing the league redraws without refetching.
+function drawFixtures() {
+  const { fixtures, notice, mine } = fixtureData;
   const panel = document.getElementById('panel');
   const mineMap = new Map((mine || []).map((p) => [p.fixtureId, p]));
   if (!fixtures.length) {
     panel.innerHTML = '<div class="empty"><b>Quiet on the pitch</b><span>No fixtures in the next 14 days. The fixtures always come back round, so check again closer to the weekend.</span></div>';
     return;
   }
-  panel.innerHTML = (notice ? `<div class="notice">${esc(notice)}</div>` : '') + fixtures.map((f) => {
+  const league = savedLeague();
+  const shown = league ? fixtures.filter((f) => f.competition === league) : fixtures;
+  const leagueName = (LEAGUE_FILTER.find(([code]) => code === league) || [])[1] || '';
+  const picker = `<div class="league-filter"><label for="league-filter">League</label><select id="league-filter" aria-label="Filter fixtures by league">${LEAGUE_FILTER.map(([code, name]) => `<option value="${code}"${code === league ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></div>`;
+  const cards = shown.length ? shown.map((f) => {
     const { local, wat } = fmtKick(f.kickoff);
     const p = mineMap.get(f.id);
     const locked = Date.now() >= new Date(f.kickoff).getTime();
@@ -340,7 +370,12 @@ async function renderFixtures() {
       </div>
       ${status}
     </div>`;
-  }).join('');
+  }).join('') : `<div class="empty"><b>No ${esc(leagueName)} fixtures</b><span>Nothing in the next 14 days for this league. Pick another league or All leagues.</span></div>`;
+  panel.innerHTML = picker + (notice ? `<div class="notice">${esc(notice)}</div>` : '') + cards;
+  panel.querySelector('#league-filter').onchange = (e) => {
+    try { localStorage.setItem(LEAGUE_KEY, e.target.value); } catch (x) { /* private mode: still filter this session */ }
+    drawFixtures();
+  };
   panel.querySelectorAll('[data-f]').forEach((card) => {
     const fid = card.dataset.f;
     let pick = mineMap.get(fid)?.pick || null;
