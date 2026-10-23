@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#07090f" />
+<meta name="description" content="StakeLess: predict football results with friends. Free to play, points and bragging rights only." />
+<title>StakeLess</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800;900&display=swap" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="26" height="26"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M16 6l3.5 2.6-1.3 4.1h-4.4l-1.3-4.1zM9.2 12.3l3.3 2.4-.3 4.3-3.9.9-1.6-3.3zM22.8 12.3l1.6 3.3-1.6 3.3-3.9-.9-.3-4.3zM11.9 22.9l1.1-3.9h4l1.1 3.9-2.8 1.9z" fill="currentColor"/></svg>
+    </span>
+    <div class="brand-text">
+      <h1>StakeLess</h1>
+      <span class="tagline">predict. settle. brag.</span>
+    </div>
+  </div>
+  <span id="badge" class="badge hidden"></span>
+</header>
+<div class="shell">
+  <aside id="house-ad" class="hidden" aria-label="Sponsored"></aside>
+  <main id="app"></main>
+  <aside id="side" class="side hidden" aria-label="Standings preview"></aside>
+</div>
+<footer class="footer">
+  <p>free to play. no money involved. points and bragging rights only.</p>
+</footer>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
