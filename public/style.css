@@ -217,6 +217,49 @@ input:focus, select:focus {
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
 
+/* ---------- League filter: matchday dropdown above the fixtures ---------- */
+.league-filter { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.league-filter label {
+  flex: 0 0 auto;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.league-filter select {
+  flex: 1 1 auto;
+  min-height: 52px;
+  margin: 0;
+  padding: 12px 46px 12px 16px;
+  cursor: pointer;
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color-scheme: dark;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2300e676' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 18px center;
+  background-size: 12px 8px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  -webkit-tap-highlight-color: transparent;
+}
+.league-filter select:hover { border-color: #3d4f7a; }
+.league-filter select option { background: var(--bg-2); color: var(--text); font-family: var(--body); font-weight: 600; text-transform: none; letter-spacing: 0; }
+@media (max-width: 639px) {
+  .league-filter label { font-size: 12px; }
+  .league-filter select { font-size: 17px; min-height: 56px; }
+}
+
 /* ---------- Tabs: scoreboard-style segmented control ---------- */
 .tabs {
   display: flex;
