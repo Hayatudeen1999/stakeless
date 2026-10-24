@@ -146,7 +146,7 @@ async function api(req, res, url) {
   }
   if (action === 'chat' && m === 'POST') {
     const b = await readBody(req);
-    return send(res, 200, { message: postChat(code, b) });
+    return send(res, 200, { message: await postChat(code, b) });
   }
   // Owner room settings and member management.
   if (action === 'members' && m === 'GET') {
