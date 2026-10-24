@@ -1286,11 +1286,13 @@ async function copyText(text) {
   return ok;
 }
 
+let lastShareRow = null;
 async function makeShareCard() {
   const out = document.getElementById('share-out');
   const me = (lastStandings || []).findIndex((x) => x.memberId === current.memberId);
   if (me < 0) { out.innerHTML = '<p class="error">Could not find your standing yet.</p>'; return; }
   const s = { ...lastStandings[me], position: me + 1 };
+  lastShareRow = s;
   const appUrl = await getAppUrl();
   const caption = buildCaption(s, current.name, appUrl);
   const enc = encodeURIComponent;
@@ -1382,7 +1384,7 @@ function bindBgControls() {
   };
   const vp = document.getElementById('video-poster');
   if (vp) vp.onclick = async () => {
-    try { await makeVideoPoster(s, current.name); }
+    try { await makeVideoPoster(lastShareRow, current.name); }
     catch (e) { const st = document.getElementById('bg-status'); if (st) st.textContent = 'Could not make the video: ' + e.message; }
   };
 }
