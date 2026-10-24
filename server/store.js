@@ -155,13 +155,25 @@ export async function restoreFromCloud() {
 }
 
 // Pushes the latest data to GitHub at most once per minute. Fire-and-forget: failures are logged only.
+let cloudFailures = 0;
 function scheduleCloudPush() {
   if (!cloud.enabled || cloudTimer) return;
   const wait = Math.max(0, cloudLastPush + CLOUD_EVERY_MS - Date.now());
   cloudTimer = setTimeout(() => {
     cloudTimer = null;
     cloudLastPush = Date.now();
-    cloud.syncUp(db).catch((err) => console.error('[cloudsync] push failed:', err.message));
+    cloud.syncUp(db).then(() => { cloudFailures = 0; }).catch((err) => {
+      cloudFailures++;
+      console.error(`[cloudsync] push failed (attempt ${cloudFailures}):`, err.message);
+      // A failed push must not be dropped: retry quickly, then keep the data dirty
+      // so the next save or a later retry still gets it to GitHub.
+      if (cloudFailures <= 5) {
+        cloudTimer = setTimeout(() => { cloudTimer = null; scheduleCloudPush(); }, 15000);
+        cloudTimer.unref?.();
+      } else {
+        dirty = true;
+      }
+    });
   }, wait);
   cloudTimer.unref?.();
 }
