@@ -34,8 +34,8 @@ function headers(extra = {}) {
   };
 }
 
-function url() {
-  const p = DATA_PATH.split('/').map(encodeURIComponent).join('/');
+function url(rel = DATA_PATH) {
+  const p = rel.split('/').map(encodeURIComponent).join('/');
   return `${API}/repos/${REPO}/contents/${p}`;
 }
 
@@ -44,8 +44,8 @@ async function ghFetch(u, init = {}) {
 }
 
 // Returns the current blob sha of the data file on the branch, or null if it does not exist yet.
-async function currentSha() {
-  const res = await ghFetch(`${url()}?ref=${encodeURIComponent(BRANCH)}`, { headers: headers() });
+async function currentSha(rel = DATA_PATH) {
+  const res = await ghFetch(`${url(rel)}?ref=${encodeURIComponent(BRANCH)}`, { headers: headers() });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub GET contents failed: HTTP ${res.status}`);
   const body = await res.json();
@@ -84,5 +84,40 @@ export async function syncDown() {
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`GitHub GET contents failed: HTTP ${res.status}`);
+  return res.text();
+}
+
+// --- Generic binary-adjacent helpers for chat voice notes (base64 text blobs). ---
+
+// Saves a base64 payload as a file in the data repo. Fails loudly; callers log.
+export async function putFile(rel, textB64) {
+  if (!enabled) return false;
+  const sha = await currentSha(rel);
+  const body = {
+    message: `stakeless voice note ${rel} ${new Date().toISOString()}`,
+    content: Buffer.from(textB64, 'utf8').toString('base64'),
+    branch: BRANCH,
+  };
+  if (sha) body.sha = sha;
+  const res = await ghFetch(url(rel), {
+    method: 'PUT',
+    headers: headers({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`GitHub PUT ${rel} failed: HTTP ${res.status} ${detail.slice(0, 120)}`);
+  }
+  return true;
+}
+
+// Returns the stored base64 payload for a file, or null when it does not exist.
+export async function getFile(rel) {
+  if (!enabled) return null;
+  const res = await ghFetch(`${url(rel)}?ref=${encodeURIComponent(BRANCH)}`, {
+    headers: headers({ Accept: 'application/vnd.github.raw' }),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub GET ${rel} failed: HTTP ${res.status}`);
   return res.text();
 }
