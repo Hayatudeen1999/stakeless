@@ -880,3 +880,69 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 .ad-dots { display: flex; gap: 4px; align-items: center; padding: 0 8px; }
 .ad-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.25); cursor: pointer; }
 .ad-dots i.on { background: #00e676; }
+
+/* ============================================================
+   PREMIUM RESTYLE LAYER (v21) - loads last, overrides above.
+   Quieter palette, softer geometry, real typography.
+   ============================================================ */
+:root {
+  --bg: #080b12;
+  --bg-2: #0b0f18;
+  --surface: rgba(255, 255, 255, 0.03);
+  --surface-2: rgba(255, 255, 255, 0.055);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.06);
+  --text: #eef1f7;
+  --muted: #9aa3b5;
+  --accent: #22d977;
+  --accent-glow: rgba(34, 217, 119, 0.18);
+  --radius: 16px;
+  --radius-sm: 12px;
+  --display: "Space Grotesk", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, sans-serif;
+}
+* { scrollbar-color: rgba(255,255,255,0.14) var(--bg); }
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border: none; border-radius: 99px; }
+body {
+  font-size: 14.5px;
+  letter-spacing: 0.005em;
+  background-image:
+    radial-gradient(1000px 520px at 8% -6%, rgba(34, 217, 119, 0.07), transparent 60%),
+    radial-gradient(900px 500px at 96% -4%, rgba(88, 120, 255, 0.07), transparent 60%),
+    linear-gradient(180deg, transparent 60%, rgba(0, 0, 0, 0.5));
+}
+h1, h2, h3 { text-transform: none; letter-spacing: -0.02em; font-weight: 700; }
+h2 { font-size: clamp(24px, 5.4vw, 32px); letter-spacing: -0.03em; }
+h3 { font-size: 15px; letter-spacing: 0; color: var(--text); }
+.card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.05) inset, 0 18px 40px -24px rgba(0,0,0,0.8);
+  padding: 20px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.card:hover { transform: none; border-color: rgba(255,255,255,0.14); }
+button, .ad, input, .tabs button, .pick-group button {
+  border-radius: 12px !important;
+  transition: background 0.2s var(--ease), border-color 0.2s var(--ease), transform 0.15s var(--ease), box-shadow 0.2s var(--ease) !important;
+}
+button { font-weight: 600; letter-spacing: 0.01em; }
+button:not(.chat-circle):not(.ad-dots i):hover { transform: translateY(-1px); }
+button:not(.chat-circle):active { transform: translateY(0) scale(0.98); }
+input { border-radius: 12px !important; background: rgba(255,255,255,0.045) !important; border: 1px solid var(--line) !important; }
+input:focus { outline: none; border-color: rgba(34,217,119,0.5) !important; box-shadow: 0 0 0 3px rgba(34,217,119,0.12) !important; }
+.topbar { backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); background: rgba(8,11,18,0.72) !important; border-bottom: 1px solid var(--line-soft) !important; }
+.tabs button { text-transform: none; font-weight: 600; border-radius: 10px !important; }
+.tabs button.on { background: rgba(34,217,119,0.12) !important; color: var(--accent) !important; }
+table { border-radius: 12px; }
+th { text-transform: none; letter-spacing: 0.03em; font-weight: 600; color: var(--muted); }
+.ad { border-radius: 14px !important; }
+.mvp, .crown { border-radius: 99px; }
+.chat-log { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: no-preference) {
+  .card { animation: rise 0.45s var(--ease) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+}
