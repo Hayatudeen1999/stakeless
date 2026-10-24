@@ -815,3 +815,8 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 .room-settings h3 { margin: 14px 0 6px; font-size: 15px; }
 .toggle-row { display: flex; gap: 8px; align-items: center; font-weight: 600; cursor: pointer; }
 .toggle-row input { width: auto; }
+
+/* Quick emoji row above the chat input */
+.emoji-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.emoji-btn { flex: 0 0 auto; font-size: 17px; line-height: 1; padding: 5px 8px; border-radius: 10px; border: 1px solid var(--line, rgba(255,255,255,0.12)); background: rgba(255,255,255,0.04); cursor: pointer; transition: transform 0.08s ease, background 0.08s ease; }
+.emoji-btn:active { transform: scale(1.25); background: rgba(255,255,255,0.12); }
