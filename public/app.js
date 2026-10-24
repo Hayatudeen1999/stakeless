@@ -836,8 +836,12 @@ async function makeVideoPoster(s, leagueName) {
     ctx.drawImage(content, 0, 0);
   };
   drawFrame();
+  if (!('MediaRecorder' in window) || !c.captureStream) { if (status) status.textContent = 'This browser cannot record video posters. Try Chrome on Android or desktop.'; return; }
   const stream = c.captureStream(30);
-  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  // iPhone Safari records mp4, Chrome/Firefox record webm. Pick whatever actually works.
+  const candidates = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
+  const mime = candidates.find((m) => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } });
+  if (!mime) { if (status) status.textContent = 'This browser cannot record video posters. Try Chrome.'; return; }
   const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4000000 });
   const chunks = [];
   rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
@@ -845,7 +849,8 @@ async function makeVideoPoster(s, leagueName) {
     v.pause();
     URL.revokeObjectURL(v.src);
     const blob = new Blob(chunks, { type: 'video/webm' });
-    const file = new File([blob], `stakeless-${current.code}-${s.position}.webm`, { type: 'video/webm' });
+    const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+    const file = new File([blob], `stakeless-${current.code}-${s.position}.${ext}`, { type: mime.split(';')[0] });
     const url = URL.createObjectURL(blob);
     const prev = document.querySelector('.share-preview');
     if (prev) prev.innerHTML = `<video src="${url}" controls autoplay loop muted playsinline style="display:block;width:100%"></video>`;
@@ -862,9 +867,10 @@ async function makeVideoPoster(s, leagueName) {
   await v.play();
   rec.start();
   if (status) status.textContent = 'Recording your video poster... keep this tab open.';
-  const tick = () => { if (!rec.state || rec.state !== 'recording') return; drawFrame(); requestAnimationFrame(tick); };
+  const tick = () => { if (!rec || rec.state !== 'recording') return; drawFrame(); requestAnimationFrame(tick); };
   tick();
-  setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, dur * 1000);
+  const stopTimer = setTimeout(() => { try { if (rec.state === 'recording') rec.stop(); } catch {} }, dur * 1000);
+  rec.onerror = () => { clearTimeout(stopTimer); if (status) status.textContent = 'Recording failed. Try a shorter video.'; };
 }
 
 // ---------- Poster backgrounds: custom image, video frame, or built-in preset ----------
@@ -1375,7 +1381,10 @@ function bindBgControls() {
     makeShareCard();
   };
   const vp = document.getElementById('video-poster');
-  if (vp) vp.onclick = () => makeVideoPoster(s, current.name);
+  if (vp) vp.onclick = async () => {
+    try { await makeVideoPoster(s, current.name); }
+    catch (e) { const st = document.getElementById('bg-status'); if (st) st.textContent = 'Could not make the video: ' + e.message; }
+  };
 }
 
 async function renderMine() {
