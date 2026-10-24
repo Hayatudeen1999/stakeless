@@ -47,6 +47,7 @@ function streakBadge(n) {
 
 const rooms = () => JSON.parse(localStorage.getItem(KEY) || '[]');
 const saveRoom = (r) => {
+  // Keep at most 3 leagues visible: the newest stays, the oldest drops off the list.
   const list = rooms().filter((x) => x.code !== r.code);
   list.unshift(r);
   localStorage.setItem(KEY, JSON.stringify(list));
@@ -569,16 +570,18 @@ async function renderChat() {
     <div class="card">
       <h3>Room chat</h3>
       <div id="chat-log" class="chat-log"><div class="empty" id="chat-empty"><b>Dead quiet</b><span>No messages yet. Post your bold prediction and let the room argue with it.</span></div></div>
-      <div class="emoji-wrap">
-        <button id="emoji-toggle" type="button" class="chat-mic emoji-toggle" title="Emoji" aria-label="Emoji picker">
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.8-3.5H7.2c.6 2 2.5 3.5 4.8 3.5z"/></svg>
+      <form id="chat-form" class="chat-form">
+        <button id="emoji-toggle" type="button" class="chat-circle" title="Emoji" aria-label="Emoji picker">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.8-3.5H7.2c.6 2 2.5 3.5 4.8 3.5z"/></svg>
+        </button>
+        <button id="chat-mic" type="button" class="chat-circle" title="Record a voice note (30s max)" aria-label="Voice note">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15zm5.5-3.5a5.5 5.5 0 0 1-4.75 5.45V20h2.25a.75.75 0 0 1 0 1.5h-6a.75.75 0 0 1 0-1.5h2.25v-3.05A5.5 5.5 0 0 1 6.5 11.5a.75.75 0 0 1 1.5 0 4 4 0 1 0 8 0 4 4 0 0 1 .01-.08.75.75 0 0 1 1.49.08z"/></svg>
+        </button>
+        <input id="chat-input" maxlength="280" placeholder="Message" autocomplete="off" />
+        <button id="chat-send" type="submit" class="chat-circle chat-send" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 20.85 12 3.4 3.6l-.01 6.53L14 12 3.39 13.87z"/></svg>
         </button>
         <div id="emoji-pop" class="emoji-pop hidden" aria-label="Pick an emoji"></div>
-      </div>
-      <form id="chat-form" class="chat-form">
-        <button id="chat-mic" type="button" class="chat-mic" title="Record a voice note (30s max)">🎤</button>
-        <input id="chat-input" maxlength="280" placeholder="Talk trash, share your picks..." autocomplete="off" />
-        <button id="chat-send" type="submit">Send</button>
       </form>
       <p class="error" id="chat-err"></p>
     </div>`;
@@ -781,10 +784,74 @@ function drawStakelessLogo(ctx, x, y, r) {
   ctx.restore();
 }
 
+
+// ---------- Video poster: records the poster canvas while the user's video plays behind ----------
+// Exports a .webm (plays on WhatsApp, Telegram, X DMs). Capped at 40s or the video length.
+async function makeVideoPoster(s, leagueName) {
+  const out = document.getElementById('share-out');
+  const status = document.getElementById('bg-status');
+  if (!posterVideoFile) return;
+  const maxLen = 40;
+  const v = document.createElement('video');
+  v.muted = true;
+  v.playsInline = true;
+  v.src = URL.createObjectURL(posterVideoFile);
+  try {
+    await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = () => rej(new Error('video failed to load')); setTimeout(rej, 10000); });
+  } catch (e) { if (status) status.textContent = "Couldn't read that video."; return; }
+  const dur = Math.min(isFinite(v.duration) && v.duration > 0 ? v.duration : maxLen, maxLen);
+  const c = document.createElement('canvas');
+  c.width = SIZE; c.height = SIZE;
+  const ctx = c.getContext('2d');
+  const drawFrame = () => {
+    // video cover-fit behind
+    const vw = v.videoWidth || SIZE, vh = v.videoHeight || SIZE;
+    const scale = Math.max(SIZE / vw, SIZE / vh);
+    const dw = vw * scale, dh = vh * scale;
+    ctx.drawImage(v, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
+    ctx.fillStyle = 'rgba(8,12,24,0.55)';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    // poster content on top, using the normal renderer minus its own background
+    const content = renderPosterContent(s, leagueName);
+    ctx.drawImage(content, 0, 0);
+  };
+  drawFrame();
+  const stream = c.captureStream(30);
+  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4000000 });
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    v.pause();
+    URL.revokeObjectURL(v.src);
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const file = new File([blob], `stakeless-${current.code}-${s.position}.webm`, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const prev = document.querySelector('.share-preview');
+    if (prev) prev.innerHTML = `<video src="${url}" controls autoplay loop muted playsinline style="display:block;width:100%"></video>`;
+    const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
+    const row = document.createElement('div');
+    row.className = 'row share-actions';
+    row.innerHTML = `<a class="share-btn" href="${url}" download="${esc(file.name)}">Download video</a>${canShareFile ? '<button class="secondary" id="native-video-share">Share</button>' : ''}`;
+    out.querySelector('.share-socials').before(row);
+    const nvs = document.getElementById('native-video-share');
+    if (nvs) nvs.onclick = () => navigator.share({ files: [file], title: 'My StakeLess record' }).catch(() => {});
+    if (status) status.textContent = `Video poster ready (${Math.round(dur)}s).`;
+  };
+  v.loop = true;
+  await v.play();
+  rec.start();
+  if (status) status.textContent = 'Recording your video poster... keep this tab open.';
+  const tick = () => { if (!rec.state || rec.state !== 'recording') return; drawFrame(); requestAnimationFrame(tick); };
+  tick();
+  setTimeout(() => { if (rec.state === 'recording') rec.stop(); }, dur * 1000);
+}
+
 // ---------- Poster backgrounds: custom image, video frame, or built-in preset ----------
 // null = default dark matchday theme. Otherwise a canvas drawn full-bleed under a dark overlay.
 let posterBg = null;
 let posterBgLabel = '';
+let posterVideoFile = null;
 
 function loadImageFile(file) {
   return new Promise((resolve, reject) => {
@@ -1036,6 +1103,108 @@ function renderPoster(s, leagueName) {
   ctx.fillText('free to play. points and bragging rights only.', pad, 1070);
   return canvas;
 }
+function renderPosterContent(s, leagueName) {
+  const canvas = document.createElement('canvas');
+  canvas.width = SIZE;
+  canvas.height = SIZE;
+  const ctx = canvas.getContext('2d');
+  const W = SIZE;
+  const pad = 80;
+
+
+  // header: logo + wordmark + tagline
+  drawStakelessLogo(ctx, pad + 36, pad + 36, 36);
+  ctx.fillStyle = '#f1f5ff';
+  ctx.font = '800 52px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('StakeLess', pad + 92, pad + 36);
+  ctx.fillStyle = '#8a96b3';
+  ctx.font = '600 24px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('PREDICT. SETTLE. BRAG.', pad, pad + 110);
+
+  // league name
+  ctx.fillStyle = '#8a96b3';
+  ctx.font = '700 26px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('LEAGUE', pad, 330);
+  ctx.fillStyle = '#f1f5ff';
+  ctx.font = '800 60px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText(fitText(ctx, leagueName, W - pad * 2), pad, 400);
+
+  // player name
+  ctx.fillStyle = '#8a96b3';
+  ctx.font = '700 26px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('PLAYER', pad, 480);
+  const sTier = streakTier(s.streak || 0);
+  if (sTier) {
+    const label = sTier.tier === 'crown' ? `UNSTOPPABLE ${s.streak} IN A ROW` : sTier.tier === 'fire' ? `ON FIRE ${s.streak} IN A ROW` : `${s.streak} IN A ROW`;
+    ctx.font = '800 26px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    const tw = ctx.measureText(label).width;
+    const bx = pad + ctx.measureText('PLAYER').width + 30;
+    ctx.fillStyle = sTier.tier === 'crown' ? 'rgba(255,201,77,0.2)' : 'rgba(255,120,40,0.2)';
+    roundRect(ctx, bx, 452, tw + 52, 42, 21);
+    ctx.fill();
+    ctx.fillStyle = sTier.tier === 'crown' ? '#ffc94d' : '#ff9f43';
+    ctx.fillText(label, bx + 26, 482);
+    drawStreakIcon(ctx, sTier.tier, bx + 8, 452);
+  }
+  ctx.fillStyle = '#f1f5ff';
+  ctx.font = '800 84px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText(fitText(ctx, s.name, W - pad * 2), pad, 570);
+
+  // position and points
+  const total = lastStandings ? lastStandings.length : 1;
+  ctx.fillStyle = '#00e676';
+  ctx.font = '900 200px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText(`#${s.position}`, pad, 790);
+  const posW = ctx.measureText(`#${s.position}`).width;
+  ctx.fillStyle = '#8a96b3';
+  ctx.font = '700 26px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText(`of ${total} in the league`, pad, 840);
+
+  ctx.fillStyle = '#ffc94d';
+  ctx.font = '900 140px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  const ptsText = String(s.points);
+  const ptsX = Math.max(pad + posW + 90, W - pad - ctx.measureText(ptsText).width);
+  ctx.fillText(ptsText, ptsX, 780);
+  ctx.fillStyle = '#8a96b3';
+  ctx.font = '700 26px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('POINTS', ptsX, 830);
+
+  // record boxes: season and this week
+  const boxY = 880;
+  const boxH = 110;
+  const boxW = (W - pad * 2 - 24) / 2;
+  const boxes = [
+    { label: 'SEASON W-L', value: `${s.correct}-${s.settled - s.correct}` },
+    { label: 'THIS WEEK W-L', value: `${s.week.won}-${s.week.lost} · ${s.week.points} pts` },
+  ];
+  boxes.forEach((b, i) => {
+    const x = pad + i * (boxW + 24);
+    ctx.fillStyle = 'rgba(29,39,64,0.9)';
+    roundRect(ctx, x, boxY, boxW, boxH, 18);
+    ctx.fill();
+    ctx.fillStyle = '#8a96b3';
+    ctx.font = '700 20px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(b.label, x + 22, boxY + 36);
+    ctx.fillStyle = '#f1f5ff';
+    ctx.font = '800 40px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(fitText(ctx, b.value, boxW - 44), x + 22, boxY + 84);
+  });
+
+  // congrats line for the weekly leader (sits above the footer, below the record boxes)
+  if (s.weekLeader) {
+    ctx.fillStyle = '#ffc94d';
+    ctx.font = '800 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillText(fitText(ctx, 'Weekly leader. Congrats!', W - pad * 2), pad, 1020);
+  }
+
+  // footer
+  ctx.fillStyle = '#5b6684';
+  ctx.font = '600 22px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('free to play. points and bragging rights only.', pad, 1070);
+  return canvas;
+}
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
@@ -1113,6 +1282,7 @@ async function makeShareCard() {
       <div class="row share-actions">
         <a class="share-btn" href="${url}" download="${esc(file.name)}">Download PNG</a>
         <button class="secondary" id="add-bg">Add background</button>
+        ${posterVideoFile ? '<button class="secondary" id="video-poster">Make video poster</button>' : ''}
         <button class="secondary" id="reset-bg">Reset</button>
         ${canShareFile ? '<button class="secondary" id="native-share">Share</button>' : ''}
       </div>
@@ -1123,7 +1293,7 @@ async function makeShareCard() {
         <button class="secondary" data-bg-preset="neon">Neon</button>
       </div>
       <input type="file" id="bg-file" accept="image/*,video/*" hidden />
-      <p class="share-hint muted" id="bg-status">${posterBgLabel ? `Background: ${esc(posterBgLabel)}.` : 'Default dark theme.'} Videos become a still frame from about 1 second in.</p>
+      <p class="share-hint muted" id="bg-status">${posterBgLabel ? `Background: ${esc(posterBgLabel)}.` : 'Default dark theme.'} Pick a video, then Make video poster exports it as a real video (up to 40s).</p>
       <div class="share-socials">
         <a class="share-btn social x" href="${xUrl}" target="_blank" rel="noopener">Post on X</a>
         <a class="share-btn social wa" href="${waUrl}" target="_blank" rel="noopener">Share on WhatsApp</a>
@@ -1157,10 +1327,11 @@ function bindBgControls() {
     const f = fileInput.files && fileInput.files[0];
     if (!f) return;
     const isVideo = f.type.startsWith('video/');
-    setBgStatus(isVideo ? 'Grabbing a frame from your video...' : 'Loading your image...');
+    setBgStatus(isVideo ? 'Loading your video...' : 'Loading your image...');
     try {
+      posterVideoFile = isVideo ? f : null;
       posterBg = isVideo ? await captureVideoFrame(f) : await loadImageFile(f);
-      posterBgLabel = isVideo ? 'your video (still frame)' : 'your image';
+      posterBgLabel = isVideo ? 'your video' : 'your image';
     } catch (e) {
       setBgStatus("Couldn't read that file. Try a JPG, PNG, or a short MP4.");
       return;
@@ -1180,8 +1351,11 @@ function bindBgControls() {
   if (resetBtn) resetBtn.onclick = () => {
     posterBg = null;
     posterBgLabel = '';
+    posterVideoFile = null;
     makeShareCard();
   };
+  const vp = document.getElementById('video-poster');
+  if (vp) vp.onclick = () => makeVideoPoster(s, current.name);
 }
 
 async function renderMine() {
