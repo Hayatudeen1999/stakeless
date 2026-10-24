@@ -9,13 +9,15 @@ import {
   postChat, listChat, duelsView, ensureStreakStore, ensureAllDuels,
   roomStatus, listMembers, setApproval, approveMember, kickMember,
 } from './rooms.js';
-import { flushOnExit, restoreFromCloud } from './store.js';
+import { flushOnExit, restoreFromCloud, data } from './store.js';
 import { allow, clientIp } from './ratelimit.js';
+import { dailyPicks } from './picks.js';
+import * as cloud from './cloudsync.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, '..', 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
-const BODY_MAX = 100 * 1024;
+const BODY_MAX = 600 * 1024; // room-chat voice notes ride along as base64
 const RATE_MSG = 'Easy there, too many requests. Give it a few seconds and try again.';
 
 function send(res, code, obj, extra = {}) {
@@ -26,6 +28,17 @@ function send(res, code, obj, extra = {}) {
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
+}
+
+
+// Voice-note cache and mime lookup from the room's chat log.
+const voiceCache = new Map();
+function findAudioMime(code, audioId) {
+  try {
+    const list = (data().chats || {})[code] || [];
+    const m = list.find((x) => x.audio && x.audio.id === audioId);
+    return m ? m.audio.mime : null;
+  } catch { return null; }
 }
 
 function readBody(req) {
@@ -59,6 +72,7 @@ async function api(req, res, url) {
   }
   if (p === '/api/leagues' && m === 'GET') return send(res, 200, { leagues: LEAGUES });
   if (p === '/api/share-config' && m === 'GET') return send(res, 200, { appUrl: CONFIG.appUrl || '' });
+  if (p === '/api/daily-picks' && m === 'GET') return send(res, 200, await dailyPicks({}));
   if (p === '/api/house-ad' && m === 'GET') {
     const ad = CONFIG.houseAd;
     const usable = ad && typeof ad === 'object' && (ad.headline || ad.image);
@@ -66,6 +80,34 @@ async function api(req, res, url) {
   }
   if (p === '/api/rooms' && m === 'POST') return send(res, 200, createRoom(await readBody(req)));
   if (p === '/api/rooms/join' && m === 'POST') return send(res, 200, joinRoom(await readBody(req)));
+
+  // Voice notes: stream a chat audio blob back to league members. Ids are unguessable
+  // and the room membership is still checked, so audio never leaks outside the room.
+  const audioMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/audio\/([a-z0-9-]+)$/);
+  if (audioMatch && m === 'GET') {
+    const [, aCode, audioId] = audioMatch;
+    if (!CODE_RE.test(aCode)) return send(res, 404, { error: 'League not found.' });
+    const room = getRoom(aCode);
+    const me = Number(url.searchParams.get('member')) || null;
+    if (!me) return send(res, 403, { error: 'Members only.' });
+    const member = room.members.find((mm) => mm.id === me);
+    if (!member) return send(res, 403, { error: 'Members only.' });
+    const cached = voiceCache.get(audioId);
+    if (cached) {
+      res.writeHead(200, { 'Content-Type': cached.mime, 'Cache-Control': 'public, max-age=86400' });
+      return res.end(Buffer.from(cached.b64, 'base64'));
+    }
+    let b64;
+    try { b64 = await cloud.getFile(`audio/${audioId}.b64`); }
+    catch (err) { return send(res, 502, { error: 'Voice note is still uploading, try again shortly.' }); }
+    if (!b64) return send(res, 404, { error: 'Voice note not found.' });
+    // Mime was stored in the chat message; fall back to webm.
+    const mime = findAudioMime(aCode, audioId) || 'audio/webm';
+    if (voiceCache.size > 200) voiceCache.clear();
+    voiceCache.set(audioId, { b64, mime });
+    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' });
+    return res.end(Buffer.from(b64, 'base64'));
+  }
 
   const roomMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/(\w+)$/);
   if (!roomMatch) return send(res, 404, { error: 'Not found.' });

@@ -2,13 +2,40 @@
 const app = document.getElementById('app');
 const badge = document.getElementById('badge');
 const KEY = 'stakeless.rooms';
+
+// Draws the streak badge icon (crown or flame) as vectors on the share poster canvas.
+function drawStreakIcon(ctx, tier, x, y) {
+  ctx.save();
+  ctx.fillStyle = tier === 'crown' ? '#ffc94d' : '#ff9f43';
+  if (tier === 'crown') {
+    ctx.beginPath();
+    ctx.moveTo(x, y + 26); ctx.lineTo(x, y + 8); ctx.lineTo(x + 5, y + 13);
+    ctx.lineTo(x + 9, y + 5); ctx.lineTo(x + 13, y + 13); ctx.lineTo(x + 18, y + 8);
+    ctx.lineTo(x + 18, y + 26); ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x + 11, y + 2);
+    ctx.bezierCurveTo(x + 13, y + 9, x + 18, y + 11, x + 18, y + 18);
+    ctx.bezierCurveTo(x + 18, y + 23, x + 14.5, y + 26, x + 9, y + 26);
+    ctx.bezierCurveTo(x + 3.5, y + 26, x + 1, y + 22, x + 1, y + 18);
+    ctx.bezierCurveTo(x + 1, y + 13, x + 6, y + 11, x + 7.5, y + 6);
+    ctx.bezierCurveTo(x + 9, y + 8.5, x + 9.5, y + 10, x + 9.5, y + 12);
+    ctx.bezierCurveTo(x + 12, y + 9, x + 11, y + 5, x + 11, y + 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Streak badges: 3+ flame, 5+ bigger flame with "on fire", 10+ crown "unstoppable".
+// Vector icons instead of emoji so they render identically on every device.
+const FLAME_ICON = '<svg class="sk-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13.5 0.7s.9 3-1.3 5.6c-1.5 1.8-3.7 3-4.9 5.4-1.7 3.4-.4 7.6 3 9.6-1.6-2.4-1.3-5.1.6-7 1.2-1.2 2.6-2 3.6-3.5 1.9 2.5 3.6 4.6 3 7.7-.3 1.4-1.1 2.6-2.2 3.5 3.9-1 6.6-4.4 6.2-8.4-.3-3-2.4-4.7-3.9-6.7-1.2-1.7-2.4-3.6-4.1-6.2z"/></svg>';
+const CROWN_ICON = '<svg class="sk-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2.8 7.3 7 10.9l4.2-6.4c.3-.5 1.1-.5 1.4 0l4.2 6.4 4.4-3.6c.6-.5 1.5.1 1.3.9l-2.2 9.1c-.1.5-.6.9-1.1.9H4.8c-.5 0-1-.4-1.1-.9L1.5 8.2c-.2-.8.7-1.4 1.3-.9zM4.5 19.6h15c.4 0 .8.3.8.8s-.4.8-.8.8h-15c-.4 0-.8-.3-.8-.8s.4-.8.8-.8z"/></svg>';
 function streakTier(n) {
-  if (n >= 10) return { tier: 'crown', icon: '👑🔥', label: 'Unstoppable' };
-  if (n >= 5) return { tier: 'fire', icon: '🔥🔥', label: 'On fire' };
-  if (n >= 3) return { tier: 'flame', icon: '🔥', label: '' };
+  if (n >= 10) return { tier: 'crown', icon: CROWN_ICON + FLAME_ICON, label: 'Unstoppable' };
+  if (n >= 5) return { tier: 'fire', icon: FLAME_ICON + FLAME_ICON, label: 'On fire' };
+  if (n >= 3) return { tier: 'flame', icon: FLAME_ICON, label: '' };
   return null;
 }
 function streakBadge(n) {
@@ -139,13 +166,43 @@ function home() {
       `<div class="league-row">
         <span>${esc(r.name)} <span class="muted">(${esc(r.code)})</span></span>
         <button data-open="${esc(r.code)}" class="secondary">Open</button>
-      </div>`).join('')}</div>` : ''}`;
+      </div>`).join('')}</div>` : ''}
+    <div class="card" id="picks-card"><h3>Today's picks</h3><p class="muted">Loading…</p></div>`;
+  loadDailyPicks();
   document.getElementById('go-create').onclick = createForm;
   document.getElementById('go-join').onclick = joinForm;
   app.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
     const r = rooms().find((x) => x.code === b.dataset.open);
     openRoom(r);
   });
+}
+
+// Today's picks: algorithmic fun-only suggestions, clearly disclaimed.
+async function loadDailyPicks() {
+  const card = document.getElementById('picks-card');
+  if (!card) return;
+  try {
+    const { picks, disclaimer } = await api('/api/daily-picks');
+    if (!picks.length) { card.innerHTML = "<h3>Today\u2019s picks</h3><p class=\"muted\">No matches scheduled today. Check back tomorrow.</p>"; return; }
+    card.innerHTML = `
+      <h3>Today's picks</h3>
+      <div class="picks-disclaimer">${esc(disclaimer)}</div>
+      ${picks.slice(0, 8).map((p) => {
+        if (!p.pick) return '';
+        const f = p.fixture;
+        const when = new Date(f.kickoff).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+        return `<div class="pick-row">
+          <div class="pick-main">
+            <span class="pick-comp">${esc(f.competition)}</span>
+            <span class="pick-game">${esc(f.home)} v ${esc(f.away)}</span>
+            <span class="muted">${esc(when)}</span>
+          </div>
+          <div class="pick-call"><b>${esc(p.pick)}</b> <span class="conf conf-${p.confidence}">${esc(p.label)}</span></div>
+        </div>`;
+      }).join('')}`;
+  } catch (e) {
+    card.innerHTML = "<h3>Today\u2019s picks</h3><p class=\"muted\">Picks unavailable right now.</p>";
+  }
 }
 
 function createForm() {
@@ -474,7 +531,14 @@ async function renderChat() {
     <div class="card">
       <h3>Room chat</h3>
       <div id="chat-log" class="chat-log"><div class="empty" id="chat-empty"><b>Dead quiet</b><span>No messages yet. Post your bold prediction and let the room argue with it.</span></div></div>
+      <div class="emoji-wrap">
+        <button id="emoji-toggle" type="button" class="chat-mic" title="Emoji" aria-label="Emoji picker">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.8-3.5H7.2c.6 2 2.5 3.5 4.8 3.5z"/></svg>
+        </button>
+        <div id="emoji-pop" class="emoji-pop hidden" aria-label="Pick an emoji"></div>
+      </div>
       <form id="chat-form" class="chat-form">
+        <button id="chat-mic" type="button" class="chat-mic" title="Record a voice note (30s max)">🎤</button>
         <input id="chat-input" maxlength="280" placeholder="Talk trash, share your picks..." autocomplete="off" />
         <button id="chat-send" type="submit">Send</button>
       </form>
@@ -483,6 +547,25 @@ async function renderChat() {
   const log = document.getElementById('chat-log');
   let lastId = 0;
   let busy = false;
+
+  // Emoji picker: smiley icon opens a small dropdown above the input, like WhatsApp.
+  const EMOJIS = ['🔥','😂','😭','👀','🐐','⚽','💪','🥶','💀','🤝','😤','🎯','🥳','🤡','🤐','🚀'];
+  const epop = document.getElementById('emoji-pop');
+  epop.innerHTML = EMOJIS.map((e) => `<button type="button" class="emoji-btn" data-e="${e}">${e}</button>`).join('');
+  document.getElementById('emoji-toggle').onclick = (ev) => {
+    ev.stopPropagation();
+    epop.classList.toggle('hidden');
+  };
+  epop.onclick = (ev) => {
+    const btn = ev.target.closest('.emoji-btn');
+    if (!btn) return;
+    const input = document.getElementById('chat-input');
+    if ((input.value + btn.dataset.e).length <= 280) input.value += btn.dataset.e;
+    input.focus();
+  };
+  document.addEventListener('click', (ev) => {
+    if (!epop.classList.contains('hidden') && !ev.target.closest('.emoji-wrap')) epop.classList.add('hidden');
+  });
 
   const append = (messages) => {
     if (!messages.length) return;
@@ -494,7 +577,10 @@ async function renderChat() {
       const t = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const div = document.createElement('div');
       div.className = `chat-msg${mine ? ' me' : ''}`;
-      div.innerHTML = `<div class="chat-meta"><strong>${esc(m.name)}</strong> ${streakBadge(m.streak || 0)} · ${esc(t)}</div><div>${esc(m.text)}</div>`;
+      const bodyHtml = m.audio
+        ? `${m.text ? `<div>${esc(m.text)}</div>` : ''}<audio class="chat-audio" controls preload="metadata" src="/api/rooms/${esc(current.code)}/audio/${esc(m.audio.id)}?member=${current.memberId}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'chat-audio-missing',textContent:'voice note unavailable'}))"></audio>`
+        : `<div>${esc(m.text)}</div>`;
+      div.innerHTML = `<div class="chat-meta"><strong>${esc(m.name)}</strong> ${streakBadge(m.streak || 0)} · ${esc(t)}</div>${bodyHtml}`;
       log.appendChild(div);
       lastId = Math.max(lastId, m.id);
     }
@@ -515,6 +601,47 @@ async function renderChat() {
   log.scrollTop = log.scrollHeight;
   stopPoll();
   pollTimer = setInterval(pull, 4000);
+
+  // Voice notes: MediaRecorder, 30s cap, sent as base64 with the message.
+  let recorder = null; let recChunks = []; let recTimer = null;
+  const micBtn = document.getElementById('chat-mic');
+  micBtn.onclick = async () => {
+    const err = document.getElementById('chat-err');
+    if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recChunks = [];
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      recorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        clearTimeout(recTimer);
+        micBtn.classList.remove('recording');
+        const blob = new Blob(recChunks, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size < 800) { err.textContent = 'Hold the mic a bit longer.'; return; }
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const b64 = String(reader.result).split(',')[1];
+          const input = document.getElementById('chat-input');
+          const text = input.value.trim();
+          try {
+            input.value = '';
+            await api(`/api/rooms/${current.code}/chat`, { memberId: current.memberId, text, audioBase64: b64, audioMime: (recorder.mimeType || 'audio/webm').split(';')[0] });
+            await pull();
+          } catch (e) { input.value = text; err.textContent = e.message; }
+        };
+        reader.readAsDataURL(blob);
+      };
+      recorder.start();
+      micBtn.classList.add('recording');
+      recTimer = setTimeout(() => { if (recorder && recorder.state === 'recording') recorder.stop(); }, 30000);
+      err.textContent = '';
+    } catch (e) {
+      err.textContent = 'Microphone blocked, allow it in ur browser settings.';
+    }
+  };
 
   document.getElementById('chat-form').onsubmit = async (ev) => {
     ev.preventDefault();
@@ -761,8 +888,7 @@ function renderPoster(s, leagueName) {
     ctx.fill();
     ctx.fillStyle = sTier.tier === 'crown' ? '#ffc94d' : '#ff9f43';
     ctx.fillText(label, bx + 26, 482);
-    ctx.font = '800 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.fillText(sTier.tier === 'crown' ? '👑' : '🔥', bx + 8, 482);
+    drawStreakIcon(ctx, sTier.tier, bx + 8, 452);
   }
   ctx.fillStyle = '#f1f5ff';
   ctx.font = '800 84px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
