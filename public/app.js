@@ -501,6 +501,7 @@ async function renderChat() {
     <div class="card">
       <h3>Room chat</h3>
       <div id="chat-log" class="chat-log"><div class="empty" id="chat-empty"><b>Dead quiet</b><span>No messages yet. Post your bold prediction and let the room argue with it.</span></div></div>
+      <div class="emoji-row" id="emoji-row" aria-label="Quick emojis"></div>
       <form id="chat-form" class="chat-form">
         <input id="chat-input" maxlength="280" placeholder="Talk trash, share your picks..." autocomplete="off" />
         <button id="chat-send" type="submit">Send</button>
@@ -510,6 +511,18 @@ async function renderChat() {
   const log = document.getElementById('chat-log');
   let lastId = 0;
   let busy = false;
+
+  // Quick emoji row: taps append to the input, no picker library needed.
+  const EMOJIS = ['🔥','😂','😭','👀','🐐','⚽','💪','🥶','💀','🤝','😤','🎯'];
+  const erow = document.getElementById('emoji-row');
+  erow.innerHTML = EMOJIS.map((e) => `<button type="button" class="emoji-btn" data-e="${e}">${e}</button>`).join('');
+  erow.onclick = (ev) => {
+    const btn = ev.target.closest('.emoji-btn');
+    if (!btn) return;
+    const input = document.getElementById('chat-input');
+    if ((input.value + btn.dataset.e).length <= 280) input.value += btn.dataset.e;
+    input.focus();
+  };
 
   const append = (messages) => {
     if (!messages.length) return;
