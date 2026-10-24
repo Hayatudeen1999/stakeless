@@ -2,13 +2,40 @@
 const app = document.getElementById('app');
 const badge = document.getElementById('badge');
 const KEY = 'stakeless.rooms';
+
+// Draws the streak badge icon (crown or flame) as vectors on the share poster canvas.
+function drawStreakIcon(ctx, tier, x, y) {
+  ctx.save();
+  ctx.fillStyle = tier === 'crown' ? '#ffc94d' : '#ff9f43';
+  if (tier === 'crown') {
+    ctx.beginPath();
+    ctx.moveTo(x, y + 26); ctx.lineTo(x, y + 8); ctx.lineTo(x + 5, y + 13);
+    ctx.lineTo(x + 9, y + 5); ctx.lineTo(x + 13, y + 13); ctx.lineTo(x + 18, y + 8);
+    ctx.lineTo(x + 18, y + 26); ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x + 11, y + 2);
+    ctx.bezierCurveTo(x + 13, y + 9, x + 18, y + 11, x + 18, y + 18);
+    ctx.bezierCurveTo(x + 18, y + 23, x + 14.5, y + 26, x + 9, y + 26);
+    ctx.bezierCurveTo(x + 3.5, y + 26, x + 1, y + 22, x + 1, y + 18);
+    ctx.bezierCurveTo(x + 1, y + 13, x + 6, y + 11, x + 7.5, y + 6);
+    ctx.bezierCurveTo(x + 9, y + 8.5, x + 9.5, y + 10, x + 9.5, y + 12);
+    ctx.bezierCurveTo(x + 12, y + 9, x + 11, y + 5, x + 11, y + 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Streak badges: 3+ flame, 5+ bigger flame with "on fire", 10+ crown "unstoppable".
+// Vector icons instead of emoji so they render identically on every device.
+const FLAME_ICON = '<svg class="sk-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13.5 0.7s.9 3-1.3 5.6c-1.5 1.8-3.7 3-4.9 5.4-1.7 3.4-.4 7.6 3 9.6-1.6-2.4-1.3-5.1.6-7 1.2-1.2 2.6-2 3.6-3.5 1.9 2.5 3.6 4.6 3 7.7-.3 1.4-1.1 2.6-2.2 3.5 3.9-1 6.6-4.4 6.2-8.4-.3-3-2.4-4.7-3.9-6.7-1.2-1.7-2.4-3.6-4.1-6.2z"/></svg>';
+const CROWN_ICON = '<svg class="sk-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M2.8 7.3 7 10.9l4.2-6.4c.3-.5 1.1-.5 1.4 0l4.2 6.4 4.4-3.6c.6-.5 1.5.1 1.3.9l-2.2 9.1c-.1.5-.6.9-1.1.9H4.8c-.5 0-1-.4-1.1-.9L1.5 8.2c-.2-.8.7-1.4 1.3-.9zM4.5 19.6h15c.4 0 .8.3.8.8s-.4.8-.8.8h-15c-.4 0-.8-.3-.8-.8s.4-.8.8-.8z"/></svg>';
 function streakTier(n) {
-  if (n >= 10) return { tier: 'crown', icon: '👑🔥', label: 'Unstoppable' };
-  if (n >= 5) return { tier: 'fire', icon: '🔥🔥', label: 'On fire' };
-  if (n >= 3) return { tier: 'flame', icon: '🔥', label: '' };
+  if (n >= 10) return { tier: 'crown', icon: CROWN_ICON + FLAME_ICON, label: 'Unstoppable' };
+  if (n >= 5) return { tier: 'fire', icon: FLAME_ICON + FLAME_ICON, label: 'On fire' };
+  if (n >= 3) return { tier: 'flame', icon: FLAME_ICON, label: '' };
   return null;
 }
 function streakBadge(n) {
@@ -761,8 +788,7 @@ function renderPoster(s, leagueName) {
     ctx.fill();
     ctx.fillStyle = sTier.tier === 'crown' ? '#ffc94d' : '#ff9f43';
     ctx.fillText(label, bx + 26, 482);
-    ctx.font = '800 30px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.fillText(sTier.tier === 'crown' ? '👑' : '🔥', bx + 8, 482);
+    drawStreakIcon(ctx, sTier.tier, bx + 8, 452);
   }
   ctx.fillStyle = '#f1f5ff';
   ctx.font = '800 84px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
