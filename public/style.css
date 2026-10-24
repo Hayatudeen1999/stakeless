@@ -872,3 +872,11 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 .bg-video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; filter: brightness(0.55); }
 .bg-veil { position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(8,12,24,0.55), rgba(8,12,24,0.85)); pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .bg-video { display: none; } }
+
+# rotating ad banner
+.ad-carousel { overflow: hidden; position: relative; }
+.ad-track { display: flex; transition: transform 0.5s ease; }
+.ad-slide { flex: 0 0 100%; min-width: 0; }
+.ad-dots { display: flex; gap: 4px; align-items: center; padding: 0 8px; }
+.ad-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.25); cursor: pointer; }
+.ad-dots i.on { background: #00e676; }

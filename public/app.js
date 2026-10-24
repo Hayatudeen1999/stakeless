@@ -97,23 +97,43 @@ function setBadge(source, notice) {
   badge.classList.remove('hidden');
 }
 
-// House ad: config-driven leaderboard slot. Hidden when the server returns no ad.
+// House ads: a rotating banner at the top. Each ad slides in horizontally every 6s.
+let adTimer = null;
 async function loadHouseAd() {
   const el = document.getElementById('house-ad');
   if (!el) return;
+  clearInterval(adTimer); adTimer = null;
   try {
-    const { ad } = await fetch('/api/house-ad').then((r) => r.json());
-    if (!ad) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-    const inner = ad.image
-      ? `<img src="${esc(ad.image)}" alt="${esc(ad.alt || 'Advertisement')}" />`
-      : `<div class="ad-copy"><span class="ad-kicker">${esc(ad.kicker || 'Sponsored')}</span><strong>${esc(ad.headline || '')}</strong>${ad.body ? `<span>${esc(ad.body)}</span>` : ''}</div>${ad.cta ? `<span class="ad-cta">${esc(ad.cta)}</span>` : ''}`;
-    const href = String(ad.href || '');
-    const external = /^https?:\/\//.test(href);
-    const body = href
-      ? `<a class="ad-link" href="${esc(href)}"${external ? ' target="_blank" rel="sponsored noopener"' : ''}>${inner}</a>`
-      : `<div class="ad-body">${inner}</div>`;
-    el.innerHTML = `<div class="ad"><span class="ad-label">Ad</span>${body}</div>`;
+    const { ads } = await fetch('/api/house-ads').then((r) => r.json());
+    const list = (ads || []).filter((a) => a && (a.headline || a.image));
+    if (!list.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    const renderAd = (ad) => {
+      const inner = ad.image
+        ? `<img src="${esc(ad.image)}" alt="${esc(ad.alt || 'Advertisement')}" />`
+        : `<div class="ad-copy"><span class="ad-kicker">${esc(ad.kicker || 'Sponsored')}</span><strong>${esc(ad.headline || '')}</strong>${ad.body ? `<span>${esc(ad.body)}</span>` : ''}</div>${ad.cta ? `<span class="ad-cta">${esc(ad.cta)}</span>` : ''}`;
+      const href = String(ad.href || '');
+      const external = /^https?:\/\//.test(href);
+      return href
+        ? `<a class="ad-link" href="${esc(href)}"${external ? ' target="_blank" rel="sponsored noopener"' : ''}>${inner}</a>`
+        : `<div class="ad-body">${inner}</div>`;
+    };
+    if (list.length === 1) {
+      el.innerHTML = `<div class="ad"><span class="ad-label">Ad</span>${renderAd(list[0])}</div>`;
+      el.classList.remove('hidden');
+      return;
+    }
+    el.innerHTML = `<div class="ad ad-carousel"><span class="ad-label">Ad</span><div class="ad-track">${list.map((a) => `<div class="ad-slide">${renderAd(a)}</div>`).join('')}</div><div class="ad-dots">${list.map((_, i) => `<i data-dot="${i}"${i === 0 ? ' class="on"' : ''}></i>`).join('')}</div></div>`;
     el.classList.remove('hidden');
+    let idx = 0;
+    const track = el.querySelector('.ad-track');
+    const dots = el.querySelectorAll('[data-dot]');
+    const go = (n) => {
+      idx = (n + list.length) % list.length;
+      track.style.transform = `translateX(-${idx * 100}%)`;
+      dots.forEach((d, i) => d.classList.toggle('on', i === idx));
+    };
+    adTimer = setInterval(() => go(idx + 1), 6000);
+    dots.forEach((d) => d.onclick = () => go(Number(d.dataset.dot)));
   } catch (e) {
     el.classList.add('hidden');
     el.innerHTML = '';
