@@ -1,6 +1,7 @@
 // Rooms, predictions, settlement, standings, streaks, weekly duels, chat, and room privacy.
 import { data, save, nextId } from './store.js';
 import { LEAGUES } from './config.js';
+import * as cloud from './cloudsync.js';
 import { getFixtures } from './football.js';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -549,15 +550,30 @@ export function myPredictions(code, memberId) {
 }
 
 // Room chat: plain messages per room code, polled by the client.
-export function postChat(code, { memberId, text }) {
+// A voice note arrives as { audioBase64, audioMime } and is uploaded to the data repo
+// right away; the message only stores the id, so data.json stays small.
+const VOICE_B64_MAX = 400000; // ~300 KB of audio, roughly a minute of opus
+export function postChat(code, { memberId, text, audioBase64, audioMime }) {
   const room = getRoom(code);
   const member = requireActive(room, memberId);
   const body = String(text || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_TEXT_MAX);
-  if (!body) throw new Error('Type a message first.');
+  let audio = null;
+  const b64 = String(audioBase64 || '');
+  if (b64) {
+    if (b64.length > VOICE_B64_MAX) throw new Error('Voice note too long (30 seconds max).');
+    if (!/^audio\/(webm|ogg|mp4|mpeg|wav)/.test(String(audioMime || ''))) throw new Error('Unsupported audio.');
+    audio = { id: `vn-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`, mime: String(audioMime) };
+  }
+  if (!body && !audio) throw new Error('Type a message first.');
   const db = data();
   db.chats = db.chats || {};
   const list = db.chats[code] || (db.chats[code] = []);
   const msg = { id: nextId(), memberId: member.id, name: member.name, text: body, at: new Date().toISOString() };
+  if (audio) {
+    msg.audio = audio;
+    // Fire-and-forget upload: the blob lives in the data repo, not data.json.
+    cloud.putFile(`audio/${audio.id}.b64`, b64).catch((err) => console.error('[cloudsync] voice note upload failed:', err.message));
+  }
   list.push(msg);
   if (list.length > CHAT_MAX) list.splice(0, list.length - CHAT_MAX);
   save();
