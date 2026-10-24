@@ -816,7 +816,16 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 .toggle-row { display: flex; gap: 8px; align-items: center; font-weight: 600; cursor: pointer; }
 .toggle-row input { width: auto; }
 
-/* Quick emoji row above the chat input */
-.emoji-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
-.emoji-btn { flex: 0 0 auto; font-size: 17px; line-height: 1; padding: 5px 8px; border-radius: 10px; border: 1px solid var(--line, rgba(255,255,255,0.12)); background: rgba(255,255,255,0.04); cursor: pointer; transition: transform 0.08s ease, background 0.08s ease; }
-.emoji-btn:active { transform: scale(1.25); background: rgba(255,255,255,0.12); }
+/* Emoji picker dropdown above the chat input */
+.emoji-wrap { position: relative; flex: 0 0 auto; display: flex; }
+.emoji-pop { position: absolute; bottom: calc(100% + 8px); left: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; padding: 8px; border-radius: 12px; background: #121724; border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 20; }
+.emoji-pop.hidden { display: none; }
+.emoji-btn { font-size: 20px; line-height: 1; padding: 6px; border-radius: 8px; border: none; background: transparent; cursor: pointer; transition: transform 0.08s ease, background 0.08s ease; }
+.emoji-btn:hover { background: rgba(255,255,255,0.08); }
+.emoji-btn:active { transform: scale(1.3); }
+
+/* Voice notes in room chat */
+.chat-mic { flex: 0 0 auto; font-size: 16px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); cursor: pointer; }
+.chat-mic.recording { background: rgba(255, 60, 60, 0.25); border-color: #ff5555; animation: micPulse 1s ease-in-out infinite; }
+@keyframes micPulse { 50% { transform: scale(1.08); } }
+.chat-audio { width: 100%; max-width: 260px; height: 34px; margin-top: 4px; }
