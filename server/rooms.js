@@ -553,7 +553,7 @@ export function myPredictions(code, memberId) {
 // A voice note arrives as { audioBase64, audioMime } and is uploaded to the data repo
 // right away; the message only stores the id, so data.json stays small.
 const VOICE_B64_MAX = 400000; // ~300 KB of audio, roughly a minute of opus
-export function postChat(code, { memberId, text, audioBase64, audioMime }) {
+export async function postChat(code, { memberId, text, audioBase64, audioMime }) {
   const room = getRoom(code);
   const member = requireActive(room, memberId);
   const body = String(text || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_TEXT_MAX);
@@ -573,7 +573,7 @@ export function postChat(code, { memberId, text, audioBase64, audioMime }) {
     msg.audio = audio;
     // Await the upload so the message never exists without its audio being playable.
     try {
-      await cloud.putFile(`audio/${audio.id}.b64`, b64);
+      await cloud.putFile('audio/' + audio.id + '.b64', b64);
     } catch (err) {
       console.error('[cloudsync] voice note upload failed:', err.message);
       throw new Error('Voice note could not be saved, try sending it again.');
