@@ -205,7 +205,6 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   // Daily caps: at most 2 picks per league, 8 total, per member per day.
   const today = new Date().toISOString().slice(0, 10);
   const todays = data().predictions.filter((p) => p.roomCode === code && p.memberId === Number(memberId) && (p.createdAt || '').slice(0, 10) === today && p.fixtureId !== fixtureId);
-  const fixture = null; // (fixture resolved above)
   const compOf = (fid) => (fixtures || []).find((f) => f.id === fid)?.competition;
   const thisComp = compOf(fixtureId);
   if (todays.length >= 8) throw new Error('Daily limit reached: 8 picks per day. Come back tomorrow.');

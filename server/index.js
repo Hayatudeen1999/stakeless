@@ -91,6 +91,11 @@ async function api(req, res, url) {
   if (p === '/api/leagues' && m === 'GET') return send(res, 200, { leagues: LEAGUES });
   if (p === '/api/share-config' && m === 'GET') return send(res, 200, { appUrl: CONFIG.appUrl || '' });
   if (p === '/api/daily-picks' && m === 'GET') return send(res, 200, await dailyPicks({}));
+  if (p === '/api/house-ads' && m === 'GET') {
+    const list = Array.isArray(CONFIG.houseAds) ? CONFIG.houseAds : (CONFIG.houseAd ? [CONFIG.houseAd] : []);
+    const usable = list.filter((a) => a && typeof a === 'object' && (a.headline || a.image));
+    return send(res, 200, { ads: usable });
+  }
   if (p === '/api/house-ad' && m === 'GET') {
     const ad = CONFIG.houseAd;
     const usable = ad && typeof ad === 'object' && (ad.headline || ad.image);

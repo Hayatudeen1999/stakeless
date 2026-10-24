@@ -9,8 +9,10 @@ export const CONFIG = {
   cacheMinutes: 5,
   port: process.env.PORT || 3000,
   // Leaderboard ad slot (below the header on phones, sidebar on desktop).
-  // Set houseAd to null or {} to hide the slot entirely.
-  houseAd: {
+  // Rotating banner ads. Each slides in at the top of the site every few seconds.
+// Set houseAds to [] to hide the banner entirely.
+houseAds: [
+  {
     kicker: 'Sponsored',
     headline: 'AsiaFilm',
     body: 'Stream the latest movies and series free.',
@@ -19,6 +21,25 @@ export const CONFIG = {
     image: '',
     alt: 'AsiaFilm ad',
   },
+  {
+    kicker: 'StakeLess',
+    headline: 'Champions League nights are here',
+    body: 'New UCL fixtures drop daily. Pick them before kickoff.',
+    cta: 'Make your picks',
+    href: '/#fixtures',
+    image: '',
+    alt: 'Champions League fixtures',
+  },
+  {
+    kicker: 'StakeLess',
+    headline: 'Invite 3 friends, settle it properly',
+    body: 'Leagues are better with rivals. Share your code.',
+    cta: 'Create a league',
+    href: '/#create',
+    image: '',
+    alt: 'Invite friends',
+  },
+],
 };
 
 // The 8 leagues covered by football-data.org's free tier.
