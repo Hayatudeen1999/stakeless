@@ -240,6 +240,7 @@ function getStreak(code, memberId) {
   return (data().streaks?.[code]?.[memberId]) || { current: 0, best: 0 };
 }
 
+const STREAK_MILESTONES = [5, 10, 15, 20, 25];
 function applyStreak(code, memberId, won) {
   const db = data();
   db.streaks ||= {};
@@ -247,6 +248,14 @@ function applyStreak(code, memberId, won) {
   const s = (room[memberId] ||= { current: 0, best: 0 });
   s.current = won ? s.current + 1 : 0;
   s.best = Math.max(s.best, s.current);
+  // milestone -> chat line
+  if (STREAK_MILESTONES.includes(s.current)) {
+    db.chats ||= {};
+    const list = (db.chats[code] ||= []);
+    const name = data().rooms[code]?.members.find((m) => m.id === memberId)?.name || 'Someone';
+    list.push({ id: nextId(), memberId: 0, name: 'StakeLess', text: `${name} is on a ${s.current}-pick winning streak. Who's ending it?`, at: new Date().toISOString(), system: true });
+    if (list.length > CHAT_MAX) list.splice(0, list.length - CHAT_MAX);
+  }
 }
 
 // One-time backfill: rebuild stored streaks from every settled prediction.
@@ -345,7 +354,26 @@ export function standings(code) {
   // Weekly leader: most points settled in the last 7 days (ties share it).
   const topWeek = Math.max(0, ...rows.map((r) => r.week.points));
   rows.forEach((r) => { r.weekLeader = topWeek > 0 && r.week.points === topWeek; });
+  wallOfShame(code, rows);
   return rows;
+}
+
+// Wall of shame: once a day, roast the last-place player (min 2 players, min 3 settled).
+function wallOfShame(code, rows) {
+  if (rows.length < 2) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const db = data();
+  db.shame = db.shame || {};
+  if (db.shame[code] === today) return;
+  const last = rows[rows.length - 1];
+  if (!last || last.settled < 3) return;
+  db.shame[code] = today;
+  db.chats ||= {};
+  const list = (db.chats[code] ||= []);
+  const pickLine = last.recent[0] ? `Last call: ${last.recent[0].pick.toUpperCase()} on fixture #${last.recent[0].fixtureId}.` : '';
+  list.push({ id: nextId(), memberId: 0, name: 'StakeLess', text: `WALL OF SHAME: ${last.name} sits last with ${last.points} pts from ${last.settled} picks. ${pickLine} Do better.`, at: new Date().toISOString(), system: true });
+  if (list.length > CHAT_MAX) list.splice(0, list.length - CHAT_MAX);
+  save();
 }
 
 
