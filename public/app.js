@@ -280,6 +280,7 @@ async function renderRoom() {
   app.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
       <div><strong>${esc(r.name)}</strong> <span class="muted">code ${esc(r.code)}</span></div>
+      <button class="secondary" id="invite-poster">Invite</button>
       <button class="secondary" id="home">Home</button>
     </div>
     <div class="tabs">
@@ -291,6 +292,7 @@ async function renderRoom() {
     </div>
     <div id="panel"><p class="muted">Loading...</p></div>`;
   document.getElementById('home').onclick = home;
+  document.getElementById('invite-poster').onclick = () => invitePoster(r);
   app.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; renderRoom(); });
   renderSide();
   try {
@@ -379,9 +381,10 @@ async function renderFixtures() {
 function drawFixtures() {
   const { fixtures, notice, mine } = fixtureData;
   const panel = document.getElementById('panel');
+  const savedPicks = new Map();
   const mineMap = new Map((mine || []).map((p) => [p.fixtureId, p]));
   if (!fixtures.length) {
-    panel.innerHTML = '<div class="empty"><b>Quiet on the pitch</b><span>No fixtures in the next 14 days. The fixtures always come back round, so check again closer to the weekend.</span></div>';
+    panel.innerHTML = '<div class="empty"><b>Quiet on the pitch</b><span>No fixtures this week. The fixtures always come back round, so check again closer to the weekend.</span></div>';
     return;
   }
   const league = savedLeague();
@@ -394,6 +397,7 @@ function drawFixtures() {
     const locked = Date.now() >= new Date(f.kickoff).getTime();
     const finished = f.status === 'FINISHED';
     const pickLabel = { H: f.home, D: 'Draw', A: f.away };
+    savedPicks.set(f.id, { pick: p?.pick || null, hg: p?.hg ?? '', ag: p?.ag ?? '', savedPick: p?.pick || null, savedHg: p?.hg ?? '', savedAg: p?.ag ?? '', locked: locked || finished });
     const board = finished
       ? `<div class="fx-score" aria-label="Full time ${esc(f.homeScore)} to ${esc(f.awayScore)}">${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}</div>`
       : `<div class="fx-chip"><span>${esc(wat)}</span><small>${locked ? 'locked' : 'kick off'}</small></div>`;
@@ -411,9 +415,7 @@ function drawFixtures() {
         <input type="number" min="0" max="20" data-hg value="${p?.hg ?? ''}" aria-label="Home goals" />
         <span>-</span>
         <input type="number" min="0" max="20" data-ag value="${p?.ag ?? ''}" aria-label="Away goals" />
-        <button class="secondary" data-save>Save</button>
       </div>
-      <p class="error" data-err></p>
     </div>`;
     return `<div class="card fx" data-f="${esc(f.id)}">
       <div class="fx-top">
@@ -427,42 +429,76 @@ function drawFixtures() {
       </div>
       ${status}
     </div>`;
-  }).join('') : `<div class="empty"><b>No ${esc(leagueName)} fixtures</b><span>Nothing in the next 14 days for this league. Pick another league or All leagues.</span></div>`;
+  }).join('') : `<div class="empty"><b>No ${esc(leagueName)} fixtures</b><span>Nothing this week for this league. Pick another league or All leagues.</span></div>`;
   panel.innerHTML = picker + (notice ? `<div class="notice">${esc(notice)}</div>` : '') + cards;
   panel.querySelector('#league-filter').onchange = (e) => {
     try { localStorage.setItem(LEAGUE_KEY, e.target.value); } catch (x) { /* private mode: still filter this session */ }
     drawFixtures();
   };
+  // Sticky batch bar: selections collect locally, one tap saves everything at once.
+  const bar = document.createElement('div');
+  bar.className = 'pick-bar hidden';
+  bar.id = 'pick-bar';
+  panel.appendChild(bar);
+  const refreshBar = () => {
+    const changed = [...savedPicks.entries()].filter(([fid, rr]) => !rr.locked && (rr.pick !== rr.savedPick || String(rr.hg) !== String(rr.savedHg) || String(rr.ag) !== String(rr.savedAg)));
+    bar.classList.toggle('hidden', !changed.length);
+    bar.innerHTML = `<span>${changed.length} pick${changed.length === 1 ? '' : 's'} selected</span>
+      <button id="save-all">Save all</button>
+      <p class="error" id="bar-err"></p>`;
+    document.getElementById('save-all').onclick = async () => {
+      const err = document.getElementById('bar-err');
+      const btn = document.getElementById('save-all');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        for (const [fid, rr] of changed) {
+          if (!rr.pick) throw new Error('Pick a winner or draw for every selected game.');
+          await api(`/api/rooms/${current.code}/predict`, { memberId: current.memberId, fixtureId: fid, pick: rr.pick, hg: rr.hg, ag: rr.ag });
+        }
+        await renderFixtures();
+      } catch (e) {
+        err.textContent = e.message;
+        btn.disabled = false; btn.textContent = 'Save all';
+      }
+    };
+  };
   panel.querySelectorAll('[data-f]').forEach((card) => {
     const fid = card.dataset.f;
-    let pick = mineMap.get(fid)?.pick || null;
+    const row = savedPicks.get(fid);
     card.querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => {
-      pick = b.dataset.pick;
+      row.pick = b.dataset.pick;
       card.querySelectorAll('[data-pick]').forEach((x) => x.classList.toggle('on', x === b));
+      refreshBar();
     });
-    const save = card.querySelector('[data-save]');
-    if (!save) return;
-    save.onclick = async () => {
-      const err = card.querySelector('[data-err]');
-      try {
-        if (!pick) throw new Error('Pick a winner or draw first.');
-        const hg = card.querySelector('[data-hg]').value;
-        const ag = card.querySelector('[data-ag]').value;
-        await api(`/api/rooms/${current.code}/predict`, { memberId: current.memberId, fixtureId: fid, pick, hg, ag });
-        renderRoom();
-      } catch (e) { err.textContent = e.message; }
-    };
+    const hg = card.querySelector('[data-hg]');
+    const ag = card.querySelector('[data-ag]');
+    if (hg) hg.oninput = () => { row.hg = hg.value; refreshBar(); };
+    if (ag) ag.oninput = () => { row.ag = ag.value; refreshBar(); };
   });
+  refreshBar();
 }
 
 async function renderStandings() {
   const { standings } = await api(`/api/rooms/${current.code}/standings`);
   lastStandings = standings;
   const rows = standings.map((s, i) => `<tr>
-    <td>${i + 1}</td><td>${esc(s.name)}${s.memberId === current.memberId ? ' (you)' : ''} ${streakBadge(s.streak)}${s.weekLeader ? ' <span class="crown">★ week</span>' : ''}</td>
+    <td>${i + 1}</td><td><span class="h2h-link" data-h2h="${s.memberId}" data-name="${esc(s.name)}">${esc(s.name)}${s.memberId === current.memberId ? ' (you)' : ''}</span>${s.weekLeader ? ' <span class="mvp" title="Weekly MVP">MVP</span>' : ''} ${streakBadge(s.streak)}</td>
     <td><strong>${s.points}</strong></td><td>${s.correct}</td><td>${s.exact}</td><td>${s.streak}</td><td>${s.bestStreak}</td></tr>`).join('');
+  panel.querySelectorAll('[data-h2h]').forEach((el) => {
+    el.onclick = async () => {
+      const other = Number(el.dataset.h2h);
+      if (other === current.memberId) return;
+      const box = document.getElementById('h2h-box');
+      box.innerHTML = '<p class="muted">Loading…</p>';
+      try {
+        const r = await api(`/api/rooms/${current.code}/h2h?me=${current.memberId}&other=${other}`);
+        box.innerHTML = `<div class="h2h-card"><b>You ${r.me.wins} - ${r.other.wins} ${esc(r.other.name)}</b><span class="muted">${r.draws} level of ${r.games} shared games</span></div>`;
+      } catch (e) { box.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+    };
+  });
   const recent = standings.flatMap((s) => s.recent.map((p) => ({ name: s.name, p }))).slice(0, 10);
   document.getElementById('panel').innerHTML = `
+    <div id="h2h-box"></div>
     <div class="card" style="overflow-x:auto">
       <table><thead><tr><th>#</th><th>Player</th><th>Pts</th><th>Right</th><th>Exact</th><th>Current streak</th><th>Best streak</th></tr></thead>
       <tbody>${rows}</tbody></table>
@@ -576,7 +612,7 @@ async function renderChat() {
       const mine = m.memberId === current.memberId;
       const t = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const div = document.createElement('div');
-      div.className = `chat-msg${mine ? ' me' : ''}`;
+      div.className = `chat-msg${mine ? ' me' : ''}${m.system ? ' system' : ''}`;
       const bodyHtml = m.audio
         ? `${m.text ? `<div>${esc(m.text)}</div>` : ''}<audio class="chat-audio" controls preload="metadata" src="/api/rooms/${esc(current.code)}/audio/${esc(m.audio.id)}?member=${current.memberId}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'chat-audio-missing',textContent:'voice note unavailable'}))"></audio>`
         : `<div>${esc(m.text)}</div>`;
@@ -659,6 +695,57 @@ async function renderChat() {
       err.textContent = e.message;
     }
   };
+}
+
+
+// ---------- Invite poster: shareable image with the league code big and centered ----------
+function invitePoster(room) {
+  const W = 1080, H = 1080;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#0b1020');
+  grad.addColorStop(1, '#151d33');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  // pitch ring decoration
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, 420, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, 330, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#f1f5ff';
+  ctx.textAlign = 'center';
+  ctx.font = '800 64px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('StakeLess', W / 2, 200);
+  ctx.fillStyle = '#aab3c5';
+  ctx.font = '500 40px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText(`${room.name} - predict. settle. brag.`, W / 2, 270);
+  ctx.fillStyle = '#ffc94d';
+  ctx.font = '900 190px "Barlow Condensed", system-ui, sans-serif';
+  ctx.fillText(room.code.split('').join(' '), W / 2, 600);
+  ctx.fillStyle = '#f1f5ff';
+  ctx.font = '600 44px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('join with this code', W / 2, 700);
+  ctx.fillStyle = '#aab3c5';
+  ctx.font = '400 34px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+  ctx.fillText('stakeless-7ido.onrender.com', W / 2, 780);
+  ctx.fillText('free to play. no money involved.', W / 2, 950);
+  c.toBlob((blob) => {
+    const file = new File([blob], `stakeless-invite-${room.code}.png`, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: `Join ${room.name} on StakeLess`, text: `Join my league, code ${room.code}` }).catch(() => {});
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `stakeless-invite-${room.code}.png`;
+      a.click();
+    }
+  });
 }
 
 // ---------- Share card: square PNG poster drawn on canvas ----------
