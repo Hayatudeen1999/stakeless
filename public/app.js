@@ -501,8 +501,14 @@ async function renderChat() {
     <div class="card">
       <h3>Room chat</h3>
       <div id="chat-log" class="chat-log"><div class="empty" id="chat-empty"><b>Dead quiet</b><span>No messages yet. Post your bold prediction and let the room argue with it.</span></div></div>
-      <div class="emoji-row" id="emoji-row" aria-label="Quick emojis"></div>
+      <div class="emoji-wrap">
+        <button id="emoji-toggle" type="button" class="chat-mic" title="Emoji" aria-label="Emoji picker">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.8-3.5H7.2c.6 2 2.5 3.5 4.8 3.5z"/></svg>
+        </button>
+        <div id="emoji-pop" class="emoji-pop hidden" aria-label="Pick an emoji"></div>
+      </div>
       <form id="chat-form" class="chat-form">
+        <button id="chat-mic" type="button" class="chat-mic" title="Record a voice note (30s max)">🎤</button>
         <input id="chat-input" maxlength="280" placeholder="Talk trash, share your picks..." autocomplete="off" />
         <button id="chat-send" type="submit">Send</button>
       </form>
@@ -512,17 +518,24 @@ async function renderChat() {
   let lastId = 0;
   let busy = false;
 
-  // Quick emoji row: taps append to the input, no picker library needed.
-  const EMOJIS = ['🔥','😂','😭','👀','🐐','⚽','💪','🥶','💀','🤝','😤','🎯'];
-  const erow = document.getElementById('emoji-row');
-  erow.innerHTML = EMOJIS.map((e) => `<button type="button" class="emoji-btn" data-e="${e}">${e}</button>`).join('');
-  erow.onclick = (ev) => {
+  // Emoji picker: smiley icon opens a small dropdown above the input, like WhatsApp.
+  const EMOJIS = ['🔥','😂','😭','👀','🐐','⚽','💪','🥶','💀','🤝','😤','🎯','🥳','🤡','🤐','🚀'];
+  const epop = document.getElementById('emoji-pop');
+  epop.innerHTML = EMOJIS.map((e) => `<button type="button" class="emoji-btn" data-e="${e}">${e}</button>`).join('');
+  document.getElementById('emoji-toggle').onclick = (ev) => {
+    ev.stopPropagation();
+    epop.classList.toggle('hidden');
+  };
+  epop.onclick = (ev) => {
     const btn = ev.target.closest('.emoji-btn');
     if (!btn) return;
     const input = document.getElementById('chat-input');
     if ((input.value + btn.dataset.e).length <= 280) input.value += btn.dataset.e;
     input.focus();
   };
+  document.addEventListener('click', (ev) => {
+    if (!epop.classList.contains('hidden') && !ev.target.closest('.emoji-wrap')) epop.classList.add('hidden');
+  });
 
   const append = (messages) => {
     if (!messages.length) return;
@@ -534,7 +547,10 @@ async function renderChat() {
       const t = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const div = document.createElement('div');
       div.className = `chat-msg${mine ? ' me' : ''}`;
-      div.innerHTML = `<div class="chat-meta"><strong>${esc(m.name)}</strong> ${streakBadge(m.streak || 0)} · ${esc(t)}</div><div>${esc(m.text)}</div>`;
+      const bodyHtml = m.audio
+        ? `${m.text ? `<div>${esc(m.text)}</div>` : ''}<audio class="chat-audio" controls preload="none" src="/api/rooms/${esc(current.code)}/audio/${esc(m.audio.id)}?member=${current.memberId}"></audio>`
+        : `<div>${esc(m.text)}</div>`;
+      div.innerHTML = `<div class="chat-meta"><strong>${esc(m.name)}</strong> ${streakBadge(m.streak || 0)} · ${esc(t)}</div>${bodyHtml}`;
       log.appendChild(div);
       lastId = Math.max(lastId, m.id);
     }
@@ -555,6 +571,47 @@ async function renderChat() {
   log.scrollTop = log.scrollHeight;
   stopPoll();
   pollTimer = setInterval(pull, 4000);
+
+  // Voice notes: MediaRecorder, 30s cap, sent as base64 with the message.
+  let recorder = null; let recChunks = []; let recTimer = null;
+  const micBtn = document.getElementById('chat-mic');
+  micBtn.onclick = async () => {
+    const err = document.getElementById('chat-err');
+    if (recorder && recorder.state === 'recording') { recorder.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recChunks = [];
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      recorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        clearTimeout(recTimer);
+        micBtn.classList.remove('recording');
+        const blob = new Blob(recChunks, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size < 800) { err.textContent = 'Hold the mic a bit longer.'; return; }
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const b64 = String(reader.result).split(',')[1];
+          const input = document.getElementById('chat-input');
+          const text = input.value.trim();
+          try {
+            input.value = '';
+            await api(`/api/rooms/${current.code}/chat`, { memberId: current.memberId, text, audioBase64: b64, audioMime: (recorder.mimeType || 'audio/webm').split(';')[0] });
+            await pull();
+          } catch (e) { input.value = text; err.textContent = e.message; }
+        };
+        reader.readAsDataURL(blob);
+      };
+      recorder.start();
+      micBtn.classList.add('recording');
+      recTimer = setTimeout(() => { if (recorder && recorder.state === 'recording') recorder.stop(); }, 30000);
+      err.textContent = '';
+    } catch (e) {
+      err.textContent = 'Microphone blocked, allow it in ur browser settings.';
+    }
+  };
 
   document.getElementById('chat-form').onsubmit = async (ev) => {
     ev.preventDefault();
