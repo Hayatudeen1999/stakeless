@@ -548,7 +548,7 @@ async function renderChat() {
       const div = document.createElement('div');
       div.className = `chat-msg${mine ? ' me' : ''}`;
       const bodyHtml = m.audio
-        ? `${m.text ? `<div>${esc(m.text)}</div>` : ''}<audio class="chat-audio" controls preload="none" src="/api/rooms/${esc(current.code)}/audio/${esc(m.audio.id)}?member=${current.memberId}"></audio>`
+        ? `${m.text ? `<div>${esc(m.text)}</div>` : ''}<audio class="chat-audio" controls preload="metadata" src="/api/rooms/${esc(current.code)}/audio/${esc(m.audio.id)}?member=${current.memberId}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'chat-audio-missing',textContent:'voice note unavailable'}))"></audio>`
         : `<div>${esc(m.text)}</div>`;
       div.innerHTML = `<div class="chat-meta"><strong>${esc(m.name)}</strong> ${streakBadge(m.streak || 0)} · ${esc(t)}</div>${bodyHtml}`;
       log.appendChild(div);
