@@ -5,7 +5,7 @@ export const CONFIG = {
   footballDataApiKey: process.env.FOOTBALL_DATA_API_KEY || 'YOUR_FOOTBALL_DATA_API_KEY',
   // Public URL of this app once deployed (used in share captions and the Facebook link).
   // Set APP_URL in production, e.g. 'https://stakeless.example.com'. Empty = the browser's own address.
-  appUrl: process.env.APP_URL || '',
+  appUrl: process.env.APP_URL || 'https://stakeless-7ido.onrender.com',
   cacheMinutes: 5,
   port: process.env.PORT || 3000,
   // Leaderboard ad slot (below the header on phones, sidebar on desktop).

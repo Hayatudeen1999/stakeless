@@ -105,7 +105,7 @@ let timer = null;
 let lastBackup = 0;
 let cloudTimer = null;
 let cloudLastPush = 0;
-const CLOUD_EVERY_MS = 60 * 1000;
+const CLOUD_EVERY_MS = 15 * 1000;
 
 // True when data.json is missing, zero bytes, or only whitespace.
 function localIsEmpty() {
@@ -118,25 +118,40 @@ function localIsEmpty() {
 
 // Boot-time restore from the private GitHub repo. Only runs when the local file is missing or empty;
 // an existing data.json is always kept because it is newer. Must run before the server starts listening.
-export async function restoreFromCloud() {
+// Cloud safety: pushes are BLOCKED until a restore has succeeded (or the remote is
+// confirmed empty/local). A failed restore followed by a push would overwrite the
+// good backup with empty data - the exact bug that wiped leagues on 2026-10-24.
+let cloudReady = false;
+
+// Boot-time restore from the private GitHub repo. Only runs when the local file is missing or empty;
+// an existing data.json is always kept because it is newer. Retries on failure.
+export async function restoreFromCloud({ attempt = 0 } = {}) {
   if (!cloud.enabled) {
     console.log('cloud sync: disabled');
+    cloudReady = true;
     return 'disabled';
   }
   console.log(`cloud sync: enabled (${cloud.describe()})`);
   if (!localIsEmpty()) {
     console.log('cloud sync: local data.json present, keeping it');
+    cloudReady = true;
     return 'local-kept';
   }
   let text;
   try {
     text = await cloud.syncDown();
   } catch (err) {
-    console.error('[cloudsync] restore failed, starting with local data:', err.message);
+    console.error(`[cloudsync] restore failed (attempt ${attempt + 1}):`, err.message);
+    if (attempt < 3) {
+      await new Promise((r2) => setTimeout(r2, 5000));
+      return restoreFromCloud({ attempt: attempt + 1 });
+    }
+    console.error('[cloudsync] restore failed after retries. Cloud pushes are BLOCKED until a restore succeeds.');
     return 'failed';
   }
   if (!text || !text.trim()) {
     console.log('cloud sync: no remote copy yet, starting fresh');
+    cloudReady = true;
     return 'none';
   }
   let obj;
@@ -145,11 +160,13 @@ export async function restoreFromCloud() {
     if (!validDb(obj)) throw new Error('unexpected data shape');
   } catch (err) {
     console.error('[cloudsync] remote copy is unreadable, ignoring it:', err.message);
+    cloudReady = true;
     return 'invalid';
   }
   writeAtomic(FILE, text);
   db = obj;
   dirty = false;
+  cloudReady = true;
   console.log('cloud sync: restored data.json from GitHub');
   return 'restored';
 }
@@ -158,6 +175,12 @@ export async function restoreFromCloud() {
 let cloudFailures = 0;
 function scheduleCloudPush() {
   if (!cloud.enabled || cloudTimer) return;
+  if (!cloudReady) {
+    console.error('[cloudsync] push skipped: no successful restore this boot. Retrying restore in 10s.');
+    cloudTimer = setTimeout(() => { cloudTimer = null; restoreFromCloud().catch(() => {}); }, 10000);
+    cloudTimer.unref?.();
+    return;
+  }
   const wait = Math.max(0, cloudLastPush + CLOUD_EVERY_MS - Date.now());
   cloudTimer = setTimeout(() => {
     cloudTimer = null;
