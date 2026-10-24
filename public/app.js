@@ -568,7 +568,7 @@ async function renderChat() {
       <h3>Room chat</h3>
       <div id="chat-log" class="chat-log"><div class="empty" id="chat-empty"><b>Dead quiet</b><span>No messages yet. Post your bold prediction and let the room argue with it.</span></div></div>
       <div class="emoji-wrap">
-        <button id="emoji-toggle" type="button" class="chat-mic" title="Emoji" aria-label="Emoji picker">
+        <button id="emoji-toggle" type="button" class="chat-mic emoji-toggle" title="Emoji" aria-label="Emoji picker">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.8-3.5H7.2c.6 2 2.5 3.5 4.8 3.5z"/></svg>
         </button>
         <div id="emoji-pop" class="emoji-pop hidden" aria-label="Pick an emoji"></div>
