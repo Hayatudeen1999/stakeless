@@ -202,6 +202,15 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   if (fixture.status === 'VOID') throw new Error('This match was postponed or cancelled, so picks are closed.');
   if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Predictions are locked at kickoff.');
   if (!['H', 'D', 'A'].includes(pick)) throw new Error('Pick must be H, D or A.');
+  // Daily caps: at most 2 picks per league, 8 total, per member per day.
+  const today = new Date().toISOString().slice(0, 10);
+  const todays = data().predictions.filter((p) => p.roomCode === code && p.memberId === Number(memberId) && (p.createdAt || '').slice(0, 10) === today && p.fixtureId !== fixtureId);
+  const fixture = null; // (fixture resolved above)
+  const compOf = (fid) => (fixtures || []).find((f) => f.id === fid)?.competition;
+  const thisComp = compOf(fixtureId);
+  if (todays.length >= 8) throw new Error('Daily limit reached: 8 picks per day. Come back tomorrow.');
+  const compCount = todays.filter((p) => compOf(p.fixtureId) === thisComp).length;
+  if (compCount >= 2) throw new Error('League limit reached: at most 2 picks per league per day.');
   const store = data().predictions;
   const existing = store.find((p) => p.roomCode === code && p.memberId === Number(memberId) && p.fixtureId === fixtureId);
   const exact = hg !== '' && hg != null && ag !== '' && ag != null;
