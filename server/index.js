@@ -41,6 +41,24 @@ function findAudioMime(code, audioId) {
   } catch { return null; }
 }
 
+
+// Serves chat audio with byte-range support. Safari refuses media served without it.
+function serveAudio(res, mime, b64, rangeHeader) {
+  const buf = Buffer.from(b64, 'base64');
+  const common = { 'Content-Type': mime, 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=86400' };
+  const m = rangeHeader && rangeHeader.match(/bytes=(\d*)-(\d*)/);
+  if (m) {
+    let start = m[1] === '' ? null : Number(m[1]);
+    let end = m[2] === '' ? buf.length - 1 : Math.min(Number(m[2]), buf.length - 1);
+    if (start == null) { start = buf.length - Number(m[2]); end = buf.length - 1; }
+    if (Number.isNaN(start) || start < 0 || start > end) { start = 0; end = buf.length - 1; }
+    res.writeHead(206, { ...common, 'Content-Range': `bytes ${start}-${end}/${buf.length}`, 'Content-Length': end - start + 1 });
+    return res.end(buf.subarray(start, end + 1));
+  }
+  res.writeHead(200, { ...common, 'Content-Length': buf.length });
+  return res.end(buf);
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
@@ -93,10 +111,7 @@ async function api(req, res, url) {
     const member = room.members.find((mm) => mm.id === me);
     if (!member) return send(res, 403, { error: 'Members only.' });
     const cached = voiceCache.get(audioId);
-    if (cached) {
-      res.writeHead(200, { 'Content-Type': cached.mime, 'Cache-Control': 'public, max-age=86400' });
-      return res.end(Buffer.from(cached.b64, 'base64'));
-    }
+    if (cached) return serveAudio(res, cached.mime, cached.b64, req.headers.range);
     let b64;
     try { b64 = await cloud.getFile(`audio/${audioId}.b64`); }
     catch (err) { return send(res, 502, { error: 'Voice note is still uploading, try again shortly.' }); }
@@ -105,8 +120,7 @@ async function api(req, res, url) {
     const mime = findAudioMime(aCode, audioId) || 'audio/webm';
     if (voiceCache.size > 200) voiceCache.clear();
     voiceCache.set(audioId, { b64, mime });
-    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' });
-    return res.end(Buffer.from(b64, 'base64'));
+    return serveAudio(res, mime, b64, req.headers.range);
   }
 
   const roomMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/(\w+)$/);
