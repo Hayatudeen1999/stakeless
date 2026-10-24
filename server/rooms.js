@@ -571,8 +571,13 @@ export function postChat(code, { memberId, text, audioBase64, audioMime }) {
   const msg = { id: nextId(), memberId: member.id, name: member.name, text: body, at: new Date().toISOString() };
   if (audio) {
     msg.audio = audio;
-    // Fire-and-forget upload: the blob lives in the data repo, not data.json.
-    cloud.putFile(`audio/${audio.id}.b64`, b64).catch((err) => console.error('[cloudsync] voice note upload failed:', err.message));
+    // Await the upload so the message never exists without its audio being playable.
+    try {
+      await cloud.putFile(`audio/${audio.id}.b64`, b64);
+    } catch (err) {
+      console.error('[cloudsync] voice note upload failed:', err.message);
+      throw new Error('Voice note could not be saved, try sending it again.');
+    }
   }
   list.push(msg);
   if (list.length > CHAT_MAX) list.splice(0, list.length - CHAT_MAX);
