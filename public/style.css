@@ -780,7 +780,9 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 /* ---------- Streak badges ---------- */
 .sk { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; vertical-align: middle; font-size: 13px; line-height: 1; white-space: nowrap; }
 .sk b { font-family: var(--display); font-weight: 800; font-size: 12px; color: #ff9f43; }
-.sk-flame { font-size: 14px; }
+.sk-ico { display: block; }
+.sk-flame .sk-ico { color: #ff9f43; }
+.sk-crown .sk-ico:first-child { color: #ffc94d; }
 .sk-fire { font-size: 17px; padding: 2px 7px; border-radius: 999px; background: rgba(255, 120, 40, 0.14); box-shadow: 0 0 12px rgba(255, 120, 40, 0.35); }
 .sk-fire .sk-line, .sk-crown .sk-line { font-family: var(--display); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: #ff9f43; }
 .sk-crown { font-size: 18px; padding: 2px 9px; border-radius: 999px; background: linear-gradient(90deg, rgba(255, 201, 77, 0.2), rgba(255, 120, 40, 0.2)); box-shadow: 0 0 14px rgba(255, 201, 77, 0.45); animation: skGlow 2.4s ease-in-out infinite; }
