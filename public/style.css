@@ -861,3 +861,8 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 .mvp { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #ffc94d; background: rgba(255, 201, 77, 0.15); border-radius: 999px; padding: 2px 7px; vertical-align: middle; }
 .h2h-link { cursor: pointer; border-bottom: 1px dashed rgba(255,255,255,0.25); }
 .h2h-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+
+/* Home screen video background */
+.bg-video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; filter: brightness(0.55); }
+.bg-veil { position: fixed; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(8,12,24,0.55), rgba(8,12,24,0.85)); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .bg-video { display: none; } }

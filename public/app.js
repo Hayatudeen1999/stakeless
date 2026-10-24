@@ -153,6 +153,8 @@ function home() {
   setSide('');
   const mine = rooms();
   app.innerHTML = `
+    <video class="bg-video" autoplay muted loop playsinline aria-hidden="true"><source src="/bg.mp4" type="video/mp4" /></video>
+    <div class="bg-veil" aria-hidden="true"></div>
     <div class="card">
       <div class="kicker">Matchday predictions</div>
       <h2>Predict the football. Settle the bragging rights.</h2>
