@@ -166,13 +166,43 @@ function home() {
       `<div class="league-row">
         <span>${esc(r.name)} <span class="muted">(${esc(r.code)})</span></span>
         <button data-open="${esc(r.code)}" class="secondary">Open</button>
-      </div>`).join('')}</div>` : ''}`;
+      </div>`).join('')}</div>` : ''}
+    <div class="card" id="picks-card"><h3>Today's picks</h3><p class="muted">Loading…</p></div>`;
+  loadDailyPicks();
   document.getElementById('go-create').onclick = createForm;
   document.getElementById('go-join').onclick = joinForm;
   app.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
     const r = rooms().find((x) => x.code === b.dataset.open);
     openRoom(r);
   });
+}
+
+// Today's picks: algorithmic fun-only suggestions, clearly disclaimed.
+async function loadDailyPicks() {
+  const card = document.getElementById('picks-card');
+  if (!card) return;
+  try {
+    const { picks, disclaimer } = await api('/api/daily-picks');
+    if (!picks.length) { card.innerHTML = "<h3>Today\u2019s picks</h3><p class=\"muted\">No matches scheduled today. Check back tomorrow.</p>"; return; }
+    card.innerHTML = `
+      <h3>Today's picks</h3>
+      <div class="picks-disclaimer">${esc(disclaimer)}</div>
+      ${picks.slice(0, 8).map((p) => {
+        if (!p.pick) return '';
+        const f = p.fixture;
+        const when = new Date(f.kickoff).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+        return `<div class="pick-row">
+          <div class="pick-main">
+            <span class="pick-comp">${esc(f.competition)}</span>
+            <span class="pick-game">${esc(f.home)} v ${esc(f.away)}</span>
+            <span class="muted">${esc(when)}</span>
+          </div>
+          <div class="pick-call"><b>${esc(p.pick)}</b> <span class="conf conf-${p.confidence}">${esc(p.label)}</span></div>
+        </div>`;
+      }).join('')}`;
+  } catch (e) {
+    card.innerHTML = "<h3>Today\u2019s picks</h3><p class=\"muted\">Picks unavailable right now.</p>";
+  }
 }
 
 function createForm() {

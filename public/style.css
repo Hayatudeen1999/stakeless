@@ -829,3 +829,17 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 .chat-mic.recording { background: rgba(255, 60, 60, 0.25); border-color: #ff5555; animation: micPulse 1s ease-in-out infinite; }
 @keyframes micPulse { 50% { transform: scale(1.08); } }
 .chat-audio { width: 100%; max-width: 260px; height: 34px; margin-top: 4px; }
+
+/* Today's picks card on home */
+.picks-disclaimer { font-size: 12px; color: #aab3c5; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 7px 10px; margin-bottom: 10px; }
+.pick-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.pick-row:last-child { border-bottom: none; }
+.pick-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pick-comp { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #8fa3c8; }
+.pick-game { font-weight: 600; }
+.pick-call { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; text-align: right; }
+.pick-call b { font-family: var(--display); }
+.conf { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.conf-high { color: #4ade80; background: rgba(74, 222, 128,0.12); }
+.conf-medium { color: #ffc94d; background: rgba(255, 201, 77,0.12); }
+.conf-low { color: #aab3c5; background: rgba(255,255,255,0.08); }
