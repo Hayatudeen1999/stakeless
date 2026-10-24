@@ -38,7 +38,7 @@ function buildTable(matches) {
 }
 
 export async function dailyPicks({ member }) {
-  const { fixtures } = await getFixtures();
+  const { data: fixtures } = await getFixtures();
   const day = new Date().toISOString().slice(0, 10);
   const todays = fixtures.filter((f) => f.kickoff && f.kickoff.slice(0, 10) === day);
   const seen = new Set();
