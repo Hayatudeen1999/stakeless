@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { CONFIG, LEAGUES } from './config.js';
 import {
   createRoom, joinRoom, getRoom, listFixtures, predict, settleFinished, standings, myPredictions,
-  postChat, listChat, duelsView, ensureStreakStore, ensureAllDuels,
+  postChat, listChat, duelsView, ensureStreakStore, ensureAllDuels, h2h,
   roomStatus, listMembers, setApproval, approveMember, kickMember,
 } from './rooms.js';
 import { flushOnExit, restoreFromCloud, data } from './store.js';
@@ -147,6 +147,9 @@ async function api(req, res, url) {
   if (action === 'standings' && m === 'GET') {
     await settleFinished();
     return send(res, 200, { standings: standings(code) });
+  }
+  if (action === 'h2h' && m === 'GET') {
+    return send(res, 200, h2h(code, Number(url.searchParams.get('me')) || 0, Number(url.searchParams.get('other')) || 0));
   }
   if (action === 'duels' && m === 'GET') {
     await settleFinished();

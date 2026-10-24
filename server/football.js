@@ -49,8 +49,10 @@ function mapMatch(m) {
 }
 
 async function fetchCompetition(league) {
-  const from = new Date(Date.now() - 3 * 864e5);
-  const to = new Date(Date.now() + 14 * 864e5);
+  // Scoped to the current week (yesterday to next Sunday): keeps fixtures fresh
+  // without overwhelming users with games 2-3 weeks away.
+  const from = new Date(Date.now() - 1 * 864e5);
+  const to = new Date(Date.now() + 7 * 864e5);
   const url = `https://api.football-data.org/v4/competitions/${league.code}/matches?dateFrom=${isoDay(from)}&dateTo=${isoDay(to)}`;
   const res = await fetch(url, {
     headers: { 'X-Auth-Token': CONFIG.footballDataApiKey },

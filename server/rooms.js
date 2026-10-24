@@ -274,12 +274,14 @@ function syncVoidFlags(fixtures) {
 }
 
 // Idempotent settlement: a fixture settles once, when FINISHED with a score.
-export async function settleFinished() {
-  const { data: fixtures } = await getFixtures();
+export async function settleFinished(fixturesOverride) {
+  const { data: fixtures } = fixturesOverride ? { data: fixturesOverride } : await getFixtures();
   const done = data().settledFixtures;
   let changed = syncVoidFlags(fixtures);
   const fresh = [];
+  const finishedById = {};
   for (const f of fixtures) {
+    if (f.status === 'FINISHED' && f.homeScore != null) finishedById[f.id] = f;
     if (f.status !== 'FINISHED' || done[f.id] || f.homeScore == null) continue;
     const outcome = pickOutcome(f.homeScore, f.awayScore);
     for (const p of data().predictions) {
@@ -300,6 +302,8 @@ export async function settleFinished() {
   // Streaks move in kickoff order so a run of picks builds the way it played out.
   fresh.sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff) || a.p.id - b.p.id);
   for (const { p } of fresh) applyStreak(p.roomCode, p.memberId, p.points > 0);
+  // Settlement alerts: drop a result line into each affected room's chat.
+  if (fresh.length) pushSettlementAlerts(fresh, finishedById);
   // Duels: pair this week's members, then close any duel whose week has ended.
   for (const code of Object.keys(data().rooms)) ensureDuels(code);
   finalizeDuels();
@@ -334,6 +338,54 @@ export function standings(code) {
   const topWeek = Math.max(0, ...rows.map((r) => r.week.points));
   rows.forEach((r) => { r.weekLeader = topWeek > 0 && r.week.points === topWeek; });
   return rows;
+}
+
+
+// Result lines in the room chat the moment matches settle: "FULL-TIME Man City 2-0 Villa. 3 nailed it."
+function pushSettlementAlerts(fresh, finishedById) {
+  const db = data();
+  db.chats = db.chats || {};
+  const byRoom = new Map();
+  for (const { p } of fresh) {
+    if (!byRoom.has(p.roomCode)) byRoom.set(p.roomCode, []);
+    byRoom.get(p.roomCode).push(p);
+  }
+  for (const [code, preds] of byRoom) {
+    const room = db.rooms[code];
+    if (!room) continue;
+    const list = db.chats[code] || (db.chats[code] = []);
+    const seen = new Set();
+    for (const { p } of preds) {
+      const f = finishedById[p.fixtureId];
+      if (!f || seen.has(f.id)) continue;
+      seen.add(f.id);
+      const all = db.predictions.filter((x) => x.fixtureId === f.id && x.settled && x.roomCode === code);
+      const nailed = all.filter((x) => x.points >= 3).length;
+      const line = `FULL-TIME ${f.home} ${f.homeScore}-${f.awayScore} ${f.away}. ${all.length} picked it, ${nailed} nailed it.`;
+      list.push({ id: nextId(), memberId: 0, name: 'StakeLess', text: line, at: new Date().toISOString(), system: true });
+    }
+    if (list.length > CHAT_MAX) list.splice(0, list.length - CHAT_MAX);
+  }
+}
+
+// Head-to-head record between two members across settled fixtures they both picked.
+export function h2h(code, meId, otherId) {
+  const room = getRoom(code);
+  gateRead(room, meId);
+  const a = Number(meId); const b = Number(otherId);
+  const other = room.members.find((m) => m.id === b);
+  if (!other) throw new Error('Player not found.');
+  const mine = data().predictions.filter((p) => p.roomCode === code && p.memberId === a && p.settled);
+  const theirs = new Map(data().predictions.filter((p) => p.roomCode === code && p.memberId === b && p.settled).map((p) => [p.fixtureId, p]));
+  let meWins = 0, otherWins = 0, draws = 0;
+  for (const p of mine) {
+    const o = theirs.get(p.fixtureId);
+    if (!o || o.points == null || p.points == null) continue;
+    if (p.points > o.points) meWins++;
+    else if (p.points < o.points) otherWins++;
+    else draws++;
+  }
+  return { me: { name: room.members.find((m) => m.id === a)?.name || 'You', wins: meWins }, other: { name: other.name, wins: otherWins }, draws, games: meWins + otherWins + draws };
 }
 
 // ---------- Weekly head-to-head duels ----------
