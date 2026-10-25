@@ -1,4 +1,5 @@
 // Frontend: home, create/join, league view with Fixtures, Standings, Room chat, My predictions tabs.
+import { applyLiveNames } from './league-names.js';
 const app = document.getElementById('app');
 const badge = document.getElementById('badge');
 const KEY = 'stakeless.rooms';
@@ -187,7 +188,7 @@ function home() {
     </div>
     ${mine.length ? `<div class="card"><h3>Your leagues</h3>${mine.map((r) =>
       `<div class="league-row">
-        <span>${esc(r.name)} <span class="muted">(${esc(r.code)})</span></span>
+        <span><span class="league-name" data-name-for="${esc(r.code)}">${esc(r.name)}</span> <span class="muted">(${esc(r.code)})</span></span>
         <span class="row" style="gap:6px">
           <button data-open="${esc(r.code)}" class="secondary">Open</button>
           <button data-leave="${esc(r.code)}" class="secondary">Leave</button>
@@ -195,6 +196,7 @@ function home() {
       </div>`).join('')}</div>` : ''}
     <div class="card" id="picks-card"><h3>Today's picks</h3><p class="muted">Loading…</p></div>`;
   loadDailyPicks();
+  if (mine.length) refreshSavedNames();
   document.getElementById('go-create').onclick = createForm;
   document.getElementById('go-join').onclick = joinForm;
   app.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
@@ -214,6 +216,34 @@ function home() {
       }
     } catch (x) { showBanner(x.message); }
   });
+}
+
+// Rename propagation: the saved league list keeps the name from when it was last opened, so
+// fetch every saved league's live name from the server (status is a plain GET, not rate limited)
+// and update both the stored list and the card on screen. A league that no longer exists keeps its
+// saved name here; leaving or joining again is what removes it.
+let nameRefreshSeq = 0;
+async function refreshSavedNames() {
+  const seq = ++nameRefreshSeq;
+  const saved = rooms();
+  if (!saved.length) return;
+  const results = await Promise.allSettled(saved.map((r) =>
+    api(`/api/rooms/${r.code}/status?member=${r.memberId}`).then((st) => ({ code: r.code, name: st.name }))));
+  // A newer home render started while these were in flight: let it own the list.
+  if (seq !== nameRefreshSeq) return;
+  const liveName = new Map();
+  for (const res of results) {
+    if (res.status === 'fulfilled' && res.value.name) liveName.set(res.value.code, res.value.name);
+  }
+  if (!liveName.size) return;
+  const { list, changedCodes } = applyLiveNames(rooms(), Object.fromEntries(liveName));
+  if (!changedCodes.length) return;
+  localStorage.setItem(KEY, JSON.stringify(list));
+  for (const r of list) {
+    if (!changedCodes.includes(r.code)) continue;
+    const el = app.querySelector(`[data-name-for="${CSS.escape(r.code)}"]`);
+    if (el) el.textContent = r.name;
+  }
 }
 
 // Today's picks: algorithmic fun-only suggestions, clearly disclaimed.
@@ -328,6 +358,12 @@ async function renderRoom() {
   catch (e) { statusError = e; }
   if (seq !== roomSeq || current !== r) return;
   const isOwner = !!(st && st.isOwner);
+  // Live name from the status call wins; the saved copy is refreshed so Home and reopen stay current.
+  if (st && st.name && st.name !== r.name) {
+    r.name = st.name;
+    const list = rooms().map((x) => (x.code === r.code ? { ...x, name: st.name } : x));
+    localStorage.setItem(KEY, JSON.stringify(list));
+  }
   app.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
       <div><strong>${esc(r.name)}</strong> <span class="muted">code ${esc(r.code)}</span></div>
@@ -715,6 +751,13 @@ async function renderChat() {
     <div class="card">
       <h3>Room chat</h3>
       <div id="chat-log" class="chat-log"><div class="empty" id="chat-empty"><b>Dead quiet</b><span>No messages yet. Post your bold prediction and let the room argue with it.</span></div></div>
+      <div id="reply-bar" class="reply-bar hidden" title="Tap to cancel reply">
+        <div class="reply-bar-body">
+          <span class="reply-bar-name" id="reply-bar-name"></span>
+          <span class="reply-bar-text" id="reply-bar-text"></span>
+        </div>
+        <span class="reply-bar-x" aria-hidden="true">×</span>
+      </div>
       <form id="chat-form" class="chat-form">
         <button id="emoji-toggle" type="button" class="chat-circle" title="Emoji" aria-label="Emoji picker">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM12 17.5c2.3 0 4.2-1.5 4.8-3.5H7.2c.6 2 2.5 3.5 4.8 3.5z"/></svg>
@@ -769,6 +812,37 @@ async function renderChat() {
     if (!epop.classList.contains('hidden') && !ev.target.closest('.emoji-wrap')) epop.classList.add('hidden');
   });
 
+  // Reply state: the message being replied to (null when not replying).
+  let replyTarget = null;
+  const replyBar = document.getElementById('reply-bar');
+  // Voice notes show a 'voice note' placeholder, with their caption text after it if any.
+  const previewLabel = (text, voice) => (voice ? (text ? `voice note: ${text}` : 'voice note') : String(text || ''));
+  const setReply = (m) => {
+    replyTarget = { id: m.id, name: m.name, label: previewLabel(String(m.text || '').slice(0, 120), !!m.audio) };
+    document.getElementById('reply-bar-name').textContent = m.name;
+    document.getElementById('reply-bar-text').textContent = replyTarget.label;
+    replyBar.classList.remove('hidden');
+    document.getElementById('chat-input').focus();
+  };
+  const clearReply = () => {
+    replyTarget = null;
+    replyBar.classList.add('hidden');
+  };
+  replyBar.onclick = clearReply;
+
+  // Tapping a quote jumps to the original message and flashes it briefly, like WhatsApp.
+  log.addEventListener('click', (ev) => {
+    const q = ev.target.closest('.chat-quote[data-jump]');
+    if (!q) return;
+    const target = log.querySelector(`.chat-msg[data-id="${q.dataset.jump}"]`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.remove('flash');
+    void target.offsetWidth;
+    target.classList.add('flash');
+    setTimeout(() => target.classList.remove('flash'), 1400);
+  });
+
   const append = (messages) => {
     if (!messages.length) return;
     const empty = document.getElementById('chat-empty');
@@ -779,10 +853,33 @@ async function renderChat() {
       const t = new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const div = document.createElement('div');
       div.className = `chat-msg${mine ? ' me' : ''}${m.system ? ' system' : ''}`;
+      div.dataset.id = m.id;
       const bodyHtml = m.audio
         ? `${m.text ? `<div>${esc(m.text)}</div>` : ''}<audio class="chat-audio" controls preload="metadata" src="/api/rooms/${esc(current.code)}/audio/${esc(m.audio.id)}?member=${current.memberId}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'chat-audio-missing',textContent:'voice note unavailable'}))"></audio>`
         : `<div>${esc(m.text)}</div>`;
-      div.innerHTML = `<div class="chat-meta"><strong>${esc(m.name)}</strong> ${streakBadge(m.streak || 0)} · ${esc(t)}</div>${bodyHtml}`;
+      // Quoted original above the reply: author + snippet, or a placeholder when it is gone.
+      let quoteHtml = '';
+      if (m.replyTo) {
+        const q = m.replyQuote;
+        if (!q || q.missing) {
+          quoteHtml = `<div class="chat-quote missing"><span class="chat-quote-text">message unavailable</span></div>`;
+        } else {
+          quoteHtml = `<button type="button" class="chat-quote" data-jump="${esc(q.id)}"><span class="chat-quote-name">${esc(q.name)}</span><span class="chat-quote-text">${esc(previewLabel(q.snippet, q.voice))}</span></button>`;
+        }
+      }
+      div.innerHTML = `<button type="button" class="chat-reply-btn" aria-label="Reply to ${esc(m.name)}" title="Reply"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M10 8V4l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg></button><div class="chat-meta"><strong>${esc(m.name)}</strong> ${streakBadge(m.streak || 0)} · ${esc(t)}</div>${quoteHtml}${bodyHtml}`;
+      if (!m.system) {
+        div.querySelector('.chat-reply-btn').onclick = (ev) => { ev.stopPropagation(); setReply(m); };
+        // Desktop: right-click opens the reply preview.
+        div.addEventListener('contextmenu', (ev) => { ev.preventDefault(); setReply(m); });
+        // Touch: long-press (about half a second) opens the reply preview. Moving or lifting cancels it.
+        let pressTimer = null;
+        const cancelPress = () => { clearTimeout(pressTimer); pressTimer = null; };
+        div.addEventListener('touchstart', () => { cancelPress(); pressTimer = setTimeout(() => { pressTimer = null; setReply(m); }, 450); }, { passive: true });
+        div.addEventListener('touchmove', cancelPress, { passive: true });
+        div.addEventListener('touchend', cancelPress);
+        div.addEventListener('touchcancel', cancelPress);
+      }
       log.appendChild(div);
       lastId = Math.max(lastId, m.id);
     }
@@ -828,9 +925,13 @@ async function renderChat() {
           const b64 = String(reader.result).split(',')[1];
           const input = document.getElementById('chat-input');
           const text = input.value.trim();
+          const replyTo = replyTarget ? replyTarget.id : null;
           try {
             input.value = ''; input.dispatchEvent(new Event('input'));
-            await api(`/api/rooms/${current.code}/chat`, { memberId: current.memberId, text, audioBase64: b64, audioMime: (recorder.mimeType || 'audio/webm').split(';')[0] });
+            const payload = { memberId: current.memberId, text, audioBase64: b64, audioMime: (recorder.mimeType || 'audio/webm').split(';')[0] };
+            if (replyTo) payload.replyTo = replyTo;
+            await api(`/api/rooms/${current.code}/chat`, payload);
+            clearReply();
             await pull();
           } catch (e) { input.value = text; input.dispatchEvent(new Event('input')); err.textContent = e.message; }
         };
@@ -852,9 +953,13 @@ async function renderChat() {
     const text = input.value.trim();
     if (!text) return;
     err.textContent = '';
+    const replyTo = replyTarget ? replyTarget.id : null;
     try {
       input.value = ''; input.dispatchEvent(new Event('input'));
-      await api(`/api/rooms/${current.code}/chat`, { memberId: current.memberId, text });
+      const payload = { memberId: current.memberId, text };
+      if (replyTo) payload.replyTo = replyTo;
+      await api(`/api/rooms/${current.code}/chat`, payload);
+      clearReply();
       await pull();
     } catch (e) {
       input.value = text; input.dispatchEvent(new Event('input'));
