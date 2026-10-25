@@ -1,5 +1,6 @@
 // Frontend: home, create/join, league view with Fixtures, Standings, Room chat, My predictions tabs.
 import { applyLiveNames } from './league-names.js';
+import { hasSeenRules, markRulesSeen, rulesBodyHTML } from './rules.js';
 const app = document.getElementById('app');
 const badge = document.getElementById('badge');
 const KEY = 'stakeless.rooms';
@@ -274,6 +275,58 @@ async function loadDailyPicks() {
   }
 }
 
+// League rules: the text comes from the server (built from server/scoring.js), so it always matches the scoring code.
+let rulesCache = null;
+async function loadRules() {
+  if (!rulesCache) rulesCache = await api('/api/league-rules');
+  return rulesCache;
+}
+
+// Modal popup. onClose runs once, whichever way it closes (button, backdrop or Escape).
+function showRulesModal(rules, onClose) {
+  document.querySelectorAll('.rules-overlay').forEach((n) => n.remove());
+  const wrap = document.createElement('div');
+  wrap.className = 'rules-overlay';
+  wrap.innerHTML = `
+    <div class="rules-modal card" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+      <div class="kicker">How it works</div>
+      <h2 id="rules-title">${esc(rules.title)}</h2>
+      <div class="rules-body">${rulesBodyHTML(rules, esc)}</div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px"><button id="rules-close">Got it</button></div>
+    </div>`;
+  document.body.appendChild(wrap);
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('keydown', onKey);
+    wrap.remove();
+    if (onClose) onClose();
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
+  document.getElementById('rules-close').onclick = close;
+  document.getElementById('rules-close').focus();
+}
+
+// First open of a league (right after joining, or the first open of an older one): show the popup once.
+async function maybeShowRules(code) {
+  if (hasSeenRules(code, localStorage)) return;
+  try {
+    const rules = await loadRules();
+    if (!current || current.code !== code) return;
+    if (hasSeenRules(code, localStorage) || document.querySelector('.rules-overlay')) return;
+    showRulesModal(rules, () => markRulesSeen(code, localStorage));
+  } catch (e) { /* rules unavailable: try again next open, do not mark as seen */ }
+}
+
+// Reopen on demand (View rules link). Does not change the seen flag.
+async function viewRules() {
+  try { showRulesModal(await loadRules(), null); }
+  catch (e) { showBanner(e.message); }
+}
+
 function createForm() {
   stopPoll();
   setSide('');
@@ -370,6 +423,7 @@ async function renderRoom() {
       <button class="secondary" id="invite-poster">Invite</button>
       <button class="secondary" id="home">Home</button>
     </div>
+    <div class="rules-link-row"><button class="link-btn" id="view-rules">View rules</button></div>
     <div class="tabs">
       <button data-tab="fixtures" class="${tab === 'fixtures' ? 'active' : ''}">Fixtures</button>
       <button data-tab="standings" class="${tab === 'standings' ? 'active' : ''}">Standings</button>
@@ -381,6 +435,7 @@ async function renderRoom() {
     <div id="panel"><p class="muted">Loading...</p></div>`;
   document.getElementById('home').onclick = home;
   document.getElementById('invite-poster').onclick = () => invitePoster(r);
+  document.getElementById('view-rules').onclick = viewRules;
   app.querySelectorAll('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab; renderRoom(); });
   renderSide();
   const panel = document.getElementById('panel');
@@ -389,6 +444,8 @@ async function renderRoom() {
     panel.innerHTML = '<div class="empty"><b>Waiting for approval</b><span>The league owner has to approve you before you can see the fixtures. Check back later.</span></div>';
     return;
   }
+  // Active member, first open of this league: show the rules popup once (acknowledged per league).
+  maybeShowRules(r.code);
   try {
     if (tab === 'fixtures') await renderFixtures();
     else if (tab === 'standings') await renderStandings();
@@ -422,6 +479,18 @@ async function renderSettings() {
   if (tab !== 'settings' || !document.getElementById('panel')) return;
   const row = (m, actions) => `<div class="league-row"><span>${esc(m.name)}${m.owner ? ' <span class="muted">(owner)</span>' : ''}</span><span class="row">${actions}</span></div>`;
   const myName = status.myName || current.playerName || '';
+  // League rules card: same text as the popup, from the server (built from server/scoring.js).
+  const rulesCardHTML = `<div class="card rules-card" id="rules-card"><div class="kicker">League rules</div><h3>How the game works</h3><div id="rules-card-body"><p class="muted">Loading…</p></div><div class="row" style="margin-top:12px"><button class="secondary" id="open-rules-modal">Open as popup</button></div></div>`;
+  const bindRulesCard = () => {
+    const body = document.getElementById('rules-card-body');
+    const openBtn = document.getElementById('open-rules-modal');
+    if (!body) return;
+    loadRules().then((rules) => {
+      if (!document.getElementById('rules-card-body')) return;
+      body.innerHTML = rulesBodyHTML(rules, esc);
+    }).catch(() => { body.innerHTML = '<p class="error">Rules could not load right now. Try again in a moment.</p>'; });
+    if (openBtn) openBtn.onclick = viewRules;
+  };
   const memberCard = `
     <div class="card my-settings">
       <div class="kicker">Your settings</div>
@@ -431,7 +500,7 @@ async function renderSettings() {
       <p class="muted">Shows on the standings, chat and duels. Names must be unique in the league.</p>
       <p class="error" id="my-err"></p>
     </div>`;
-  if (!isOwner) { panel.innerHTML = memberCard; bindMemberName(); return; }
+  if (!isOwner) { panel.innerHTML = memberCard + rulesCardHTML; bindMemberName(); bindRulesCard(); return; }
   // innerHTML (not insertAdjacentHTML) so a repeat render replaces the card instead of stacking a second one.
   panel.innerHTML = memberCard + `
     <div class="card room-settings">
@@ -450,7 +519,7 @@ async function renderSettings() {
         <button class="danger" id="delete-league-btn">Delete league</button>
       </div>
       <p class="error" id="manage-err"></p>
-    </div>`;
+    </div>` + rulesCardHTML;
   const err = (msg) => { document.getElementById('manage-err').textContent = msg; };
   document.getElementById('approval-toggle').onchange = async (e) => {
     try { await api(`/api/rooms/${current.code}/settings`, { memberId: current.memberId, approvalRequired: e.target.checked }); renderRoom(); }

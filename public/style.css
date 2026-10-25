@@ -1057,3 +1057,18 @@ button.chat-quote:hover { background: rgba(255,255,255,0.09); }
 .reply-bar-name { font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reply-bar-text { font-size: 13px; color: #aab3c5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reply-bar-x { flex: 0 0 auto; font-size: 20px; line-height: 1; color: #8fa3c8; padding: 0 2px; }
+
+/* ---------- League rules (v34): popup + Settings card ---------- */
+.rules-link-row { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.link-btn { background: none; border: 0; box-shadow: none; color: var(--accent); font-weight: 700; padding: 6px 2px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.rules-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(3, 5, 10, 0.78); display: flex; align-items: center; justify-content: center; padding: 16px; backdrop-filter: blur(3px); }
+.rules-modal { width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto; border-top: 3px solid var(--accent); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--line); animation: rules-in 0.22s var(--ease); }
+@keyframes rules-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+.rules-modal h2 { margin-bottom: 8px; }
+.rules-body { display: grid; gap: 10px; }
+.rules-intro { margin: 0 0 4px; color: var(--muted); }
+.rule-item { background: var(--surface-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 12px 14px; }
+.rule-item h4 { margin: 0 0 4px; font-family: var(--display); font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); }
+.rule-item p { margin: 0; line-height: 1.45; }
+.rules-fun { margin: 6px 0 0; font-size: 13px; color: var(--muted); font-style: italic; }
+.rules-card .rules-body { margin-top: 2px; }
