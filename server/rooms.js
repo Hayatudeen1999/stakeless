@@ -739,10 +739,19 @@ export function myPredictions(code, memberId) {
 // A voice note arrives as { audioBase64, audioMime } and is uploaded to the data repo
 // right away; the message only stores the id, so data.json stays small.
 const VOICE_B64_MAX = 400000; // ~300 KB of audio, roughly a minute of opus
-export async function postChat(code, { memberId, text, audioBase64, audioMime }) {
+export async function postChat(code, { memberId, text, audioBase64, audioMime, replyTo }) {
   const room = getRoom(code);
   const member = requireActive(room, memberId);
   const body = String(text || '').replace(/\s+/g, ' ').trim().slice(0, CHAT_TEXT_MAX);
+  // Optional reply: the referenced message must exist in THIS room's chat log.
+  // Lookup is room-scoped, so an id from another room is refused like a missing one.
+  let replyId = null;
+  if (replyTo !== undefined && replyTo !== null && replyTo !== '') {
+    replyId = Number(replyTo);
+    if (!Number.isInteger(replyId) || replyId <= 0) throw new Error("That message can't be replied to.");
+    const roomChat = (data().chats || {})[code] || [];
+    if (!roomChat.some((x) => x.id === replyId)) throw new Error('That message is no longer here, so it cannot be replied to.');
+  }
   let audio = null;
   const b64 = String(audioBase64 || '');
   if (b64) {
@@ -755,6 +764,7 @@ export async function postChat(code, { memberId, text, audioBase64, audioMime })
   db.chats = db.chats || {};
   const list = db.chats[code] || (db.chats[code] = []);
   const msg = { id: nextId(), memberId: member.id, name: member.name, text: body, at: new Date().toISOString() };
+  if (replyId) msg.replyTo = replyId;
   if (audio) {
     msg.audio = audio;
     // Await the upload so the message never exists without its audio being playable.
@@ -774,8 +784,23 @@ export async function postChat(code, { memberId, text, audioBase64, audioMime })
 export function listChat(code, since = 0, memberId) {
   const room = getRoom(code);
   gateRead(room, memberId);
-  const list = (data().chats || {})[code] || [];
-  return list
+  const all = (data().chats || {})[code] || [];
+  const byId = new Map(all.map((x) => [x.id, x]));
+  // Resolve each reply's quoted original so clients can render the quote without a second call.
+  // A trimmed or deleted original comes back as { missing: true }.
+  const quoteOf = (m) => {
+    if (!m.replyTo) return null;
+    const orig = byId.get(m.replyTo);
+    if (!orig) return { id: m.replyTo, missing: true };
+    return {
+      id: orig.id,
+      name: orig.name,
+      snippet: orig.audio && !orig.text ? '' : String(orig.text || '').slice(0, 120),
+      voice: !!orig.audio,
+      missing: false,
+    };
+  };
+  return all
     .filter((m) => m.id > since)
-    .map((m) => ({ ...m, streak: getStreak(code, m.memberId).current }));
+    .map((m) => ({ ...m, replyQuote: quoteOf(m), streak: getStreak(code, m.memberId).current }));
 }
