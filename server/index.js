@@ -164,7 +164,7 @@ async function api(req, res, url) {
 
   if (p === '/api/stats' && m === 'GET') return send(res, 200, statsView());
 
-  const roomMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/(\w+)$/);
+  const roomMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/([A-Za-z0-9-]+)$/);
   if (!roomMatch) return send(res, 404, { error: 'Not found.' });
   const [, code, action] = roomMatch;
   if (!CODE_RE.test(code)) return send(res, 404, { error: 'League not found.' });
