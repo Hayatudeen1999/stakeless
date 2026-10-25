@@ -255,6 +255,24 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   return row;
 }
 
+// Removes a member's saved pick on one fixture (the user un-ticked it). Idempotent: removing a
+// pick that is not there is a no-op. Locked, finished or settled picks cannot be removed.
+export function unpredict({ code, memberId, fixtureId }, fixtures) {
+  const room = getRoom(code);
+  requireActive(room, memberId);
+  const fixture = fixtures.find((f) => f.id === fixtureId);
+  if (!fixture) throw new Error('Fixture not found.');
+  if (fixture.status === 'VOID') throw new Error('This match was postponed or cancelled, so picks are closed.');
+  if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Predictions are locked at kickoff.');
+  const store = data().predictions;
+  const idx = store.findIndex((p) => p.roomCode === code && p.memberId === Number(memberId) && p.fixtureId === fixtureId);
+  if (idx === -1) return { removed: false, fixtureId };
+  if (store[idx].settled) throw new Error('This pick is already settled and cannot be removed.');
+  store.splice(idx, 1);
+  save();
+  return { removed: true, fixtureId };
+}
+
 // ---------- Streaks ----------
 // Stored per room per member in data.streaks[code][memberId] = { current, best }.
 // A settled prediction that earned points extends the streak; a miss resets it.

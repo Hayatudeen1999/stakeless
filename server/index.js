@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CONFIG, LEAGUES } from './config.js';
 import {
-  createRoom, joinRoom, getRoom, listFixtures, predict, settleFinished, standings, myPredictions,
+  createRoom, joinRoom, getRoom, listFixtures, predict, unpredict, settleFinished, standings, myPredictions,
   postChat, listChat, duelsView, ensureStreakStore, ensureAllDuels, h2h,
   roomStatus, listMembers, setApproval, approveMember, kickMember, deleteRoom,
 } from './rooms.js';
@@ -177,6 +177,11 @@ async function api(req, res, url) {
     const b = await readBody(req);
     const f = await listFixtures(code, b.memberId);
     return send(res, 200, predict({ code, ...b }, f.fixtures));
+  }
+  if (action === 'unpredict' && m === 'POST') {
+    const b = await readBody(req);
+    const f = await listFixtures(code, b.memberId);
+    return send(res, 200, unpredict({ code, memberId: b.memberId, fixtureId: b.fixtureId }, f.fixtures));
   }
   if (action === 'standings' && m === 'GET') {
     await settleFinished();
