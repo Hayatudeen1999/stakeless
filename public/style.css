@@ -278,6 +278,8 @@ input:focus, select:focus {
   min-height: 40px;
   padding: 8px 6px;
   font-size: 14px;
+  line-height: 1.2;
+  white-space: normal;
   background: transparent;
   color: var(--muted);
   box-shadow: none;
@@ -359,9 +361,10 @@ input:focus, select:focus {
   font-weight: 800;
   text-transform: uppercase;
   font-size: clamp(19px, 5vw, 25px);
-  line-height: 1.02;
+  line-height: 1.15;
   letter-spacing: 0.01em;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .fx-team.away { text-align: right; }
 .fx-chip {
@@ -412,14 +415,16 @@ input:focus, select:focus {
   min-height: 52px;
   padding: 8px 6px;
   font-size: 15px;
-  line-height: 1.1;
+  line-height: 1.2;
   background: var(--bg-2);
   color: var(--text);
   border: 1px solid var(--line);
   box-shadow: 0 3px 0 #070a12;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  height: auto;
 }
 .pick-group button:hover { border-color: #3d4f7a; }
 .pick-group button:active { box-shadow: 0 0 0 #070a12; }
@@ -514,7 +519,7 @@ input:focus, select:focus {
 
 /* ---------- Standings table ---------- */
 .card:has(> table) { padding: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
 thead th {
   font-family: var(--display);
   font-size: 13px;
@@ -642,7 +647,10 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
   border-bottom: 1px solid var(--line-soft);
 }
 .league-row:last-child { border-bottom: 0; }
-.league-row > span { font-family: var(--display); font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.league-row > span { font-family: var(--display); font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.danger-zone { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.danger-zone button.danger { background: #3a1116; color: #ff8a8a; border: 1px solid #7a2630; }
+.danger-zone button.danger:hover { border-color: #ff8a8a; }
 .league-row .muted { font-family: var(--body); font-size: 13px; text-transform: none; letter-spacing: 0; }
 
 /* ---------- House ad slot (leaderboard style) ---------- */
@@ -716,7 +724,7 @@ tbody td strong { font-family: var(--display); color: var(--accent); font-size: 
 .side-list li:last-child { border-bottom: 0; }
 .side-list .pos { font-family: var(--display); font-weight: 900; font-size: 19px; color: var(--muted); }
 .side-list li:first-child .pos { color: var(--gold); }
-.side-list .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.side-list .nm { overflow-wrap: anywhere; white-space: normal; font-weight: 600; }
 .side-list li.me .nm { color: var(--accent); }
 .side-list b { font-family: var(--display); font-size: 21px; color: var(--accent); }
 .side-card .muted { font-size: 13px; }

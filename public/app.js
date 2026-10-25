@@ -356,6 +356,11 @@ async function renderManage(panelEl) {
       <p class="muted">When on, new joiners wait as pending until you approve them.</p>
       ${pending.length ? `<h3>Pending requests</h3>${pending.map((m) => row(m, `<button data-approve="${m.id}">Approve</button><button class="secondary" data-kick="${m.id}">Decline</button>`)).join('')}` : '<p class="muted">No pending requests.</p>'}
       ${others.length ? `<h3>Members</h3>${others.map((m) => row(m, `<button class="secondary" data-kick="${m.id}">Kick</button>`)).join('')}` : ''}
+      <div class="danger-zone">
+        <h3>Delete league</h3>
+        <p class="muted">Removes this league and all its predictions, chat and standings for everyone. Cannot be undone.</p>
+        <button class="danger" id="delete-league-btn">Delete league</button>
+      </div>
       <p class="error" id="manage-err"></p>
     </div>`);
   const err = (msg) => { document.getElementById('manage-err').textContent = msg; };
@@ -367,6 +372,19 @@ async function renderManage(panelEl) {
     try { await api(`/api/rooms/${current.code}/approve`, { memberId: current.memberId, targetId: Number(b.dataset.approve) }); renderRoom(); }
     catch (x) { err(x.message); }
   });
+  // Delete league: owner only, irreversible. Confirm first with a plain popup, then type the code.
+  document.getElementById('delete-league-btn').onclick = async () => {
+    if (!confirm(`Delete "${current.name || current.code}" for everyone? This cannot be undone.`)) return;
+    const typed = prompt(`To confirm, type the league code: ${current.code}`);
+    if (typed === null) return;
+    if (typed.trim().toUpperCase() !== current.code) { err('That code does not match. Nothing was deleted.'); return; }
+    try {
+      await api(`/api/rooms/${current.code}/delete`, { memberId: current.memberId, confirm: current.code });
+      localStorage.setItem(KEY, JSON.stringify(rooms().filter((x) => x.code !== current.code)));
+      current = null;
+      home();
+    } catch (x) { err(x.message); }
+  };
   panelEl.querySelectorAll('[data-kick]').forEach((b) => b.onclick = async () => {
     if (!confirm('Remove this member from the league? Their predictions and streak go with them.')) return;
     try { await api(`/api/rooms/${current.code}/kick`, { memberId: current.memberId, targetId: Number(b.dataset.kick) }); renderRoom(); }
@@ -474,6 +492,22 @@ function drawFixtures() {
       const btn = document.getElementById('save-all');
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
+        // Client-side mirror of the server cap: max 2 picks per league per game day (kickoff date, UTC).
+        const fxById = new Map(fixtureData.fixtures.map((f) => [String(f.id), f]));
+        const dayKey = (f) => new Date(f.kickoff).toISOString().slice(0, 10);
+        const perKey = new Map();
+        for (const [fid, rr] of savedPicks.entries()) {
+          const picked = !rr.locked && (rr.pick !== rr.savedPick || String(rr.hg) !== String(rr.savedHg) || String(rr.ag) !== String(rr.savedAg))
+            ? !!rr.pick
+            : !!rr.savedPick;
+          const f = fxById.get(String(fid));
+          if (!picked || !f) continue;
+          const k = `${f.competition}|${dayKey(f)}`;
+          perKey.set(k, (perKey.get(k) || 0) + 1);
+        }
+        for (const [, n] of perKey) {
+          if (n > 2) throw new Error('max 2 picks per league per day');
+        }
         for (const [fid, rr] of changed) {
           if (!rr.pick) throw new Error('Pick a winner or draw for every selected game.');
           await api(`/api/rooms/${current.code}/predict`, { memberId: current.memberId, fixtureId: fid, pick: rr.pick, hg: rr.hg, ag: rr.ag });
