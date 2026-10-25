@@ -78,6 +78,26 @@ function readBody(req) {
 
 const CODE_RE = /^[A-Z0-9]{6}$/;
 
+// Public league stats: GET /api/stats. OPEN ENDPOINT (no auth) for now, so the owner can check
+// growth by visiting the URL. Counts only live leagues: deleted leagues are removed from
+// db.rooms and tombstoned in db.deletedRooms, and both are skipped here.
+// Players are unique by username (lowercased), since one person can be in several leagues.
+function statsView() {
+  const db = data();
+  const tombs = db.deletedRooms || {};
+  const live = Object.entries(db.rooms || {}).filter(([code, room]) => room && !tombs[code]);
+  const liveCodes = new Set(live.map(([code]) => code));
+  const players = new Set();
+  for (const [, room] of live) {
+    for (const m of room.members || []) {
+      const key = String(m.name || '').trim().toLowerCase();
+      if (key) players.add(key);
+    }
+  }
+  const predictions = (db.predictions || []).filter((p) => liveCodes.has(p.roomCode)).length;
+  return { leagues: live.length, players: players.size, predictions };
+}
+
 async function api(req, res, url) {
   const p = url.pathname;
   const m = req.method;
@@ -134,6 +154,8 @@ async function api(req, res, url) {
     voiceCache.set(audioId, { b64, mime });
     return serveAudio(res, mime, b64, req.headers.range);
   }
+
+  if (p === '/api/stats' && m === 'GET') return send(res, 200, statsView());
 
   const roomMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/(\w+)$/);
   if (!roomMatch) return send(res, 404, { error: 'Not found.' });
