@@ -597,7 +597,7 @@ async function renderChat() {
         <button id="chat-mic" type="button" class="chat-circle" title="Record a voice note (30s max)" aria-label="Voice note">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15zm5.5-3.5a5.5 5.5 0 0 1-4.75 5.45V20h2.25a.75.75 0 0 1 0 1.5h-6a.75.75 0 0 1 0-1.5h2.25v-3.05A5.5 5.5 0 0 1 6.5 11.5a.75.75 0 0 1 1.5 0 4 4 0 1 0 8 0 4 4 0 0 1 .01-.08.75.75 0 0 1 1.49.08z"/></svg>
         </button>
-        <input id="chat-input" maxlength="280" placeholder="Message" autocomplete="off" />
+        <textarea id="chat-input" rows="1" maxlength="280" placeholder="Message" autocomplete="off"></textarea>
         <button id="chat-send" type="submit" class="chat-circle chat-send" aria-label="Send">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 20.85 12 3.4 3.6l-.01 6.53L14 12 3.39 13.87z"/></svg>
         </button>
@@ -608,6 +608,21 @@ async function renderChat() {
   const log = document.getElementById('chat-log');
   let lastId = 0;
   let busy = false;
+
+  // Multi-line input: grows downward line by line up to ~6 lines, then scrolls inside the box.
+  const chatInput = document.getElementById('chat-input');
+  const fitInput = () => {
+    chatInput.style.height = 'auto';
+    chatInput.style.height = Math.min(chatInput.scrollHeight + 2, 140) + 'px';
+  };
+  chatInput.addEventListener('input', fitInput);
+  // Desktop: Enter sends, Shift+Enter adds a new line. Touch keyboards: Enter adds a new line.
+  chatInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && window.matchMedia('(pointer: fine)').matches) {
+      ev.preventDefault();
+      document.getElementById('chat-form').requestSubmit();
+    }
+  });
 
   // Emoji picker: smiley icon opens a small dropdown above the input, like WhatsApp.
   const EMOJIS = ['🔥','😂','😭','👀','🐐','⚽','💪','🥶','💀','🤝','😤','🎯','🥳','🤡','🤐','🚀'];
@@ -622,6 +637,7 @@ async function renderChat() {
     if (!btn) return;
     const input = document.getElementById('chat-input');
     if ((input.value + btn.dataset.e).length <= 280) input.value += btn.dataset.e;
+    input.dispatchEvent(new Event('input'));
     input.focus();
   };
   document.addEventListener('click', (ev) => {
@@ -688,10 +704,10 @@ async function renderChat() {
           const input = document.getElementById('chat-input');
           const text = input.value.trim();
           try {
-            input.value = '';
+            input.value = ''; input.dispatchEvent(new Event('input'));
             await api(`/api/rooms/${current.code}/chat`, { memberId: current.memberId, text, audioBase64: b64, audioMime: (recorder.mimeType || 'audio/webm').split(';')[0] });
             await pull();
-          } catch (e) { input.value = text; err.textContent = e.message; }
+          } catch (e) { input.value = text; input.dispatchEvent(new Event('input')); err.textContent = e.message; }
         };
         reader.readAsDataURL(blob);
       };
@@ -712,11 +728,11 @@ async function renderChat() {
     if (!text) return;
     err.textContent = '';
     try {
-      input.value = '';
+      input.value = ''; input.dispatchEvent(new Event('input'));
       await api(`/api/rooms/${current.code}/chat`, { memberId: current.memberId, text });
       await pull();
     } catch (e) {
-      input.value = text;
+      input.value = text; input.dispatchEvent(new Event('input'));
       err.textContent = e.message;
     }
   };
