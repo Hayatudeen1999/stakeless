@@ -10,13 +10,24 @@
 //
 // Shape: { rooms, predictions, settledFixtures, nextId, streaks, duels, chats, fixtureCache }
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as cloud from './cloudsync.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const FILE = path.join(here, 'data.json');
-const BACKUP_DIR = path.join(here, 'backups');
+
+// Where data.json and backups/ live. DATA_DIR overrides it (used by tests and any custom host).
+// Test scripts (test_*.mjs) never touch real data: they get a fresh temp dir automatically, even
+// when they forget to set DATA_DIR (ESM imports run before a test can set process.env).
+const IS_TEST_RUN = /(^|[\\/])test_[^\\/]*\.mjs$/.test(process.argv[1] || '');
+export const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : IS_TEST_RUN
+    ? fs.mkdtempSync(path.join(os.tmpdir(), 'stakeless-test-'))
+    : here;
+const FILE = path.join(DATA_DIR, 'data.json');
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const KEEP = 5;
 const FLUSH_MS = 250;
 const BACKUP_EVERY_MS = Number(process.env.BACKUP_INTERVAL_MS) || 2 * 60 * 1000;
@@ -67,7 +78,7 @@ function writeAtomic(file, text) {
 
 function removeLeftoverTemp() {
   try {
-    for (const f of fs.readdirSync(here)) {
+    for (const f of fs.readdirSync(DATA_DIR)) {
       if (f.startsWith('data.json.tmp-')) fs.unlinkSync(path.join(here, f));
     }
   } catch { /* nothing to clean */ }
@@ -76,6 +87,7 @@ function removeLeftoverTemp() {
 function boot() {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   removeLeftoverTemp();
+  if (DATA_DIR !== here) console.log(`[store] data dir: ${DATA_DIR}`);
   if (!fs.existsSync(FILE)) return { db: emptyDb(), restored: false };
   // An empty file is treated like a missing one: restoreFromCloud() fills it before the server listens.
   if (fs.readFileSync(FILE, 'utf8').trim() === '') return { db: emptyDb(), restored: false };
@@ -119,6 +131,17 @@ function localIsEmpty() {
 // Number of leagues (rooms) in a database object.
 function roomCount(obj) {
   return obj && obj.rooms && typeof obj.rooms === 'object' ? Object.keys(obj.rooms).length : 0;
+}
+
+// Known synthetic leagues from the build worker's tests (shipped by mistake in v34). A local data.json that
+// contains any of these is never trusted over the GitHub copy, whatever its league count.
+export const MOCK_CODES = new Set([
+  '2LU9J6', 'AWS8S8', 'QRW4PQ', '9YK4YV', 'G4MPYZ', 'D4NZMN',
+  'ZDWTEZ', 'KF3M7L', '99WGLX', 'D7S4WC', 'TK4BFS', 'C8ZV74',
+]);
+
+function localHasMockLeagues() {
+  return Object.keys(db.rooms || {}).filter((code) => MOCK_CODES.has(code));
 }
 
 // Cloud safety: pushes are BLOCKED until a restore has succeeded (or the remote is
@@ -187,6 +210,15 @@ export async function restoreFromCloud({ attempt = 0 } = {}) {
   const localRooms = roomCount(db);
   const remoteRooms = roomCount(obj);
   cloudReady = true;
+  const mocks = localHasMockLeagues();
+  if (mocks.length) {
+    // One-time guard: synthetic data on the local disk loses to the GitHub copy, regardless of count.
+    console.log(`[store] local data.json contains ${mocks.length} mock league(s) (${mocks.join(', ')}); trusting the GitHub copy (${remoteRooms} leagues).`);
+    writeAtomic(FILE, text);
+    db = obj;
+    dirty = false;
+    return 'restored';
+  }
   if (remoteRooms > localRooms) {
     writeAtomic(FILE, text);
     db = obj;
