@@ -313,6 +313,7 @@ async function renderRoom() {
       <button data-tab="chat" class="${tab === 'chat' ? 'active' : ''}">Chat</button>
       <button data-tab="mine" class="${tab === 'mine' ? 'active' : ''}">My predictions</button>
     </div>
+    <div id="manage"></div>
     <div id="panel"><p class="muted">Loading...</p></div>`;
   document.getElementById('home').onclick = home;
   document.getElementById('invite-poster').onclick = () => invitePoster(r);
@@ -324,7 +325,7 @@ async function renderRoom() {
       document.getElementById('panel').innerHTML = '<div class="empty"><b>Waiting for approval</b><span>The league owner has to approve you before you can see the fixtures. Check back later.</span></div>';
       return;
     }
-    if (st.isOwner) await renderManage(document.getElementById('panel'));
+    if (st.isOwner) await renderManage(document.getElementById('manage'));
     if (tab === 'fixtures') await renderFixtures();
     else if (tab === 'standings') await renderStandings();
     else if (tab === 'duels') await renderDuels();
@@ -343,13 +344,15 @@ function fmtKick(iso) {
 }
 
 // Owner-only room settings: approval toggle, pending requests, and kick. Hidden for everyone else.
-async function renderManage(panelEl) {
+// It renders into its own #manage container (above #panel), so tab renders that replace #panel never wipe it.
+async function renderManage(manageEl) {
   const { members } = await api(`/api/rooms/${current.code}/members?member=${current.memberId}`);
   const pending = members.filter((m) => m.status === 'pending');
   const others = members.filter((m) => !m.owner && m.status === 'active');
   const status = await api(`/api/rooms/${current.code}/status?member=${current.memberId}`);
   const row = (m, actions) => `<div class="league-row"><span>${esc(m.name)}${m.owner ? ' <span class="muted">(owner)</span>' : ''}</span><span class="row">${actions}</span></div>`;
-  panelEl.insertAdjacentHTML('afterbegin', `
+  // innerHTML (not insertAdjacentHTML) so a repeat render replaces the card instead of stacking a second one.
+  manageEl.innerHTML = `
     <div class="card room-settings">
       <div class="kicker">Room settings</div>
       <label class="toggle-row"><input type="checkbox" id="approval-toggle" ${status.approvalRequired ? 'checked' : ''} /> <span>Approval required to join</span></label>
@@ -362,13 +365,13 @@ async function renderManage(panelEl) {
         <button class="danger" id="delete-league-btn">Delete league</button>
       </div>
       <p class="error" id="manage-err"></p>
-    </div>`);
+    </div>`;
   const err = (msg) => { document.getElementById('manage-err').textContent = msg; };
   document.getElementById('approval-toggle').onchange = async (e) => {
     try { await api(`/api/rooms/${current.code}/settings`, { memberId: current.memberId, approvalRequired: e.target.checked }); renderRoom(); }
     catch (x) { err(x.message); }
   };
-  panelEl.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => {
+  manageEl.querySelectorAll('[data-approve]').forEach((b) => b.onclick = async () => {
     try { await api(`/api/rooms/${current.code}/approve`, { memberId: current.memberId, targetId: Number(b.dataset.approve) }); renderRoom(); }
     catch (x) { err(x.message); }
   });
@@ -385,7 +388,7 @@ async function renderManage(panelEl) {
       home();
     } catch (x) { err(x.message); }
   };
-  panelEl.querySelectorAll('[data-kick]').forEach((b) => b.onclick = async () => {
+  manageEl.querySelectorAll('[data-kick]').forEach((b) => b.onclick = async () => {
     if (!confirm('Remove this member from the league? Their predictions and streak go with them.')) return;
     try { await api(`/api/rooms/${current.code}/kick`, { memberId: current.memberId, targetId: Number(b.dataset.kick) }); renderRoom(); }
     catch (x) { err(x.message); }
