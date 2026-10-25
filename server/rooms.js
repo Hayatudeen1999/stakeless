@@ -114,6 +114,7 @@ export function roomStatus(code, memberId) {
     approvalRequired: !!room.approvalRequired,
     status: m ? memberStatus(m) : 'none',
     isOwner: !!m && m.id === ownerId(room),
+    myName: m ? m.name : null,
   };
 }
 
@@ -121,6 +122,31 @@ export function listMembers(code, memberId) {
   const room = getRoom(code);
   requireOwner(room, memberId);
   return room.members.map((m) => ({ id: m.id, name: m.name, status: memberStatus(m), owner: m.id === ownerId(room) }));
+}
+
+// Owner renames the league. Same cleaning as create (ROOM_NAME_MAX). Owner only.
+export function renameRoom({ code, memberId, name }) {
+  const room = getRoom(code);
+  requireOwner(room, memberId);
+  const roomName = cleanName(name, ROOM_NAME_MAX);
+  if (!roomName) throw new Error('Enter a league name.');
+  room.name = roomName;
+  save();
+  return { code: room.code, name: room.name };
+}
+
+// Any active member renames themselves in this league. Same cleaning as join (NAME_MAX).
+// Names must stay unique inside the league, so an exact clash is refused with a clear message.
+export function renameMember({ code, memberId, name }) {
+  const room = getRoom(code);
+  const me = requireActive(room, memberId);
+  const clean = cleanName(name, NAME_MAX);
+  if (!clean) throw new Error('Enter your name.');
+  const clash = room.members.some((m) => m.id !== me.id && m.name.toLowerCase() === clean.toLowerCase());
+  if (clash) throw new Error('That name is already taken in this league. Pick another.');
+  me.name = clean;
+  save();
+  return { name: me.name };
 }
 
 export function setApproval({ code, memberId, approvalRequired }) {
@@ -189,6 +215,36 @@ export function kickMember({ code, memberId, targetId }) {
   return { removed: name };
 }
 
+// Member leaves a league themselves (the Home-screen Leave button). Reuses the owner-remove logic:
+// their predictions and streak go, and unfinished duels give the opponent a bye.
+// Owners cannot leave (they delete the league instead). Someone not in the league is a no-op.
+export function leaveRoom({ code, memberId }) {
+  const room = data().rooms[String(code || '').trim().toUpperCase()];
+  if (!room) return { left: false, reason: 'not_found' };
+  const id = Number(memberId);
+  const me = room.members.find((m) => m.id === id);
+  if (!me) return { left: false, reason: 'not_member' };
+  if (me.id === ownerId(room)) throw new Error('The owner cannot leave. Delete the league instead.');
+  const idx = room.members.findIndex((m) => m.id === id);
+  room.members.splice(idx, 1);
+  const db = data();
+  db.predictions = db.predictions.filter((p) => !(p.roomCode === room.code && p.memberId === id));
+  if (db.streaks?.[room.code]) delete db.streaks[room.code][id];
+  const weeks = db.duels?.[room.code] || {};
+  for (const wk of Object.values(weeks)) {
+    if (Date.parse(wk.end) <= Date.now()) continue;
+    wk.pairs = wk.pairs.filter((p) => {
+      if (p.a !== id && p.b !== id) return true;
+      const other = p.a === id ? p.b : p.a;
+      if (!p.finalized) wk.byes.push(other);
+      return false;
+    });
+    wk.byes = wk.byes.filter((x) => x !== id);
+  }
+  save();
+  return { left: true, code: room.code, name: room.name };
+}
+
 export async function listFixtures(code, memberId) {
   const room = getRoom(code);
   gateRead(room, memberId);
@@ -219,7 +275,7 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   const fixture = fixtures.find((f) => f.id === fixtureId);
   if (!fixture) throw new Error('Fixture not found.');
   if (fixture.status === 'VOID') throw new Error('This match was postponed or cancelled, so picks are closed.');
-  if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Predictions are locked at kickoff.');
+  if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Kickoff passed, pick is locked.');
   if (!['H', 'D', 'A'].includes(pick)) throw new Error('Pick must be H, D or A.');
   // Daily cap: at most 2 picks per league per game day, per member. The day is the fixture's
   // kickoff date (UTC), so picks for the same day's games are counted together.
@@ -263,7 +319,7 @@ export function unpredict({ code, memberId, fixtureId }, fixtures) {
   const fixture = fixtures.find((f) => f.id === fixtureId);
   if (!fixture) throw new Error('Fixture not found.');
   if (fixture.status === 'VOID') throw new Error('This match was postponed or cancelled, so picks are closed.');
-  if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Predictions are locked at kickoff.');
+  if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Kickoff passed, pick is locked.');
   const store = data().predictions;
   const idx = store.findIndex((p) => p.roomCode === code && p.memberId === Number(memberId) && p.fixtureId === fixtureId);
   if (idx === -1) return { removed: false, fixtureId };

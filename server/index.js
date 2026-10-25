@@ -7,7 +7,7 @@ import { CONFIG, LEAGUES } from './config.js';
 import {
   createRoom, joinRoom, getRoom, listFixtures, predict, unpredict, settleFinished, standings, myPredictions,
   postChat, listChat, duelsView, ensureStreakStore, ensureAllDuels, h2h,
-  roomStatus, listMembers, setApproval, approveMember, kickMember, deleteRoom,
+  roomStatus, listMembers, setApproval, approveMember, kickMember, deleteRoom, renameRoom, renameMember, leaveRoom,
 } from './rooms.js';
 import { flushOnExit, flushAndSyncNow, restoreFromCloud, data } from './store.js';
 import { allow, clientIp } from './ratelimit.js';
@@ -123,6 +123,13 @@ async function api(req, res, url) {
   }
   if (p === '/api/rooms' && m === 'POST') return send(res, 200, createRoom(await readBody(req)));
   if (p === '/api/rooms/join' && m === 'POST') return send(res, 200, joinRoom(await readBody(req)));
+  const leaveMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/leave$/);
+  if (leaveMatch && m === 'POST') {
+    const b = await readBody(req);
+    const out = leaveRoom({ code: leaveMatch[1], memberId: b.memberId });
+    if (out.left) await flushAndSyncNow();
+    return send(res, 200, out);
+  }
   const delMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/delete$/);
   if (delMatch && m === 'POST') {
     const b = await readBody(req);
@@ -213,6 +220,20 @@ async function api(req, res, url) {
     const b = await readBody(req);
     return send(res, 200, setApproval({ code, memberId: b.memberId, approvalRequired: !!b.approvalRequired }));
   }
+  // League name: owner only. Saved and synced to the GitHub backup right away.
+  if (action === 'rename' && m === 'POST') {
+    const b = await readBody(req);
+    const out = renameRoom({ code, memberId: b.memberId, name: b.name });
+    await flushAndSyncNow();
+    return send(res, 200, out);
+  }
+  // A member renames themselves in this league. Saved and synced right away.
+  if (action === 'member-name' && m === 'POST') {
+    const b = await readBody(req);
+    const out = renameMember({ code, memberId: b.memberId, name: b.name });
+    await flushAndSyncNow();
+    return send(res, 200, out);
+  }
   if (action === 'approve' && m === 'POST') {
     const b = await readBody(req);
     return send(res, 200, approveMember({ code, memberId: b.memberId, targetId: b.targetId }));
@@ -249,7 +270,7 @@ function serveStatic(req, res, url) {
 function handleError(req, res, err) {
   if (err instanceof HttpError) return send(res, err.status, { error: err.message });
   const msg = String(err?.message || '');
-  if (/not found|not in this league|locked|must|required|only the league owner|join|Waiting|Type|Enter|Pick|postponed|cannot|No league|already/i.test(msg)) {
+  if (/not found|not in this league|locked|must|required|only the league owner|join|Waiting|Type|Enter|Pick|postponed|cannot|No league|already|owner cannot|Delete the league/i.test(msg)) {
     return send(res, 400, { error: msg });
   }
   console.error(`[server] ${req.method} ${req.url} failed:`, err);
