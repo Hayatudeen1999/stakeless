@@ -954,3 +954,59 @@ th { text-transform: none; letter-spacing: 0.03em; font-weight: 600; color: var(
   .card { animation: rise 0.45s var(--ease) both; }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 }
+
+/* ---------- v28: phone-safe standings and My predictions (no clipped letters) ---------- */
+td, th { overflow-wrap: anywhere; white-space: normal; vertical-align: middle; }
+tbody td strong { line-height: 1.25; }
+.h2h-link, .mvp { white-space: normal; }
+@media (max-width: 639px) {
+  table { font-size: 13px; }
+  thead th { font-size: 11px; padding: 9px 6px; letter-spacing: 0.04em; }
+  td { padding: 10px 6px; }
+  tbody td:first-child { font-size: 15px; min-width: 22px; padding-left: 10px; padding-right: 4px; }
+  tbody td strong { font-size: 16px; }
+}
+#panel > .card h3, #panel > .card .muted { overflow-wrap: anywhere; white-space: normal; min-width: 0; line-height: 1.35; }
+.card.my-settings input, .card.room-settings input { width: 100%; box-sizing: border-box; }
+.card.my-settings, .card.room-settings { margin-bottom: 14px; }
+
+/* ---------- v30: no clipped text on phones ----------
+   Tab row: one scrollable line, full labels, never squeezed or truncated. */
+.tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  min-width: max-content;
+  scroll-snap-align: start;
+}
+/* Headings and kickers: wrap instead of cutting words mid-letter. */
+.kicker, .kicker::before, h1, h2, h3, h4, .tagline, .league-row > span,
+.card h2, .card h3, .card h4, .card p, .card strong, .card .muted, .side-head .muted {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.kicker { line-height: 1.35; }
+.tagline { white-space: normal !important; }
+/* Header row (name / code / Invite / Home): wrap, keep buttons whole. */
+.topbar-league, #app > .row:first-child { flex-wrap: wrap; }
+#app > .row:first-child > div { min-width: 0; flex: 1 1 160px; overflow-wrap: anywhere; }
+#app > .row:first-child > button { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 639px) {
+  .tabs { gap: 3px; padding: 4px; }
+  .tabs button { font-size: 13px; padding: 9px 12px; min-height: 40px; }
+  .kicker { font-size: 12px; letter-spacing: 0.14em; }
+}
