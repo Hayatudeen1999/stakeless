@@ -236,6 +236,10 @@ server.on('clientError', (err, socket) => {
   if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
 });
 
+// Restore data.json from the GitHub backup BEFORE housekeeping touches the data and before anything is served.
+// No-op unless GitHub sync is configured.
+await restoreFromCloud();
+
 try {
   ensureStreakStore();
   ensureAllDuels();
@@ -243,8 +247,6 @@ try {
   console.error('[server] startup housekeeping failed (continuing):', err);
 }
 
-// Restore data.json from the GitHub backup before anything is served (no-op unless sync is configured).
-await restoreFromCloud();
 server.listen(CONFIG.port, () => console.log(`StakeLess running at http://localhost:${CONFIG.port}`));
 
 // Flush the write-behind batch on clean shutdown so the last few seconds of changes are kept.

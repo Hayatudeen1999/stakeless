@@ -116,15 +116,21 @@ function localIsEmpty() {
   }
 }
 
-// Boot-time restore from the private GitHub repo. Only runs when the local file is missing or empty;
-// an existing data.json is always kept because it is newer. Must run before the server starts listening.
+// Number of leagues (rooms) in a database object.
+function roomCount(obj) {
+  return obj && obj.rooms && typeof obj.rooms === 'object' ? Object.keys(obj.rooms).length : 0;
+}
+
 // Cloud safety: pushes are BLOCKED until a restore has succeeded (or the remote is
 // confirmed empty/local). A failed restore followed by a push would overwrite the
 // good backup with empty data - the exact bug that wiped leagues on 2026-10-24.
 let cloudReady = false;
 
-// Boot-time restore from the private GitHub repo. Only runs when the local file is missing or empty;
-// an existing data.json is always kept because it is newer. Retries on failure.
+// Boot-time restore from the private GitHub repo. It ALWAYS checks the cloud copy. The old rule
+// ("only restore when data.json is empty") never fired, because a deploy ships a data.json with
+// no leagues in it (it is never zero bytes), so every deploy started with empty leagues.
+// Rule: the copy with MORE leagues wins. Leagues are never deleted, so the copy with more is the newer one.
+// Must run before the server starts listening.
 export async function restoreFromCloud({ attempt = 0 } = {}) {
   if (!cloud.enabled) {
     console.log('cloud sync: disabled');
@@ -132,11 +138,6 @@ export async function restoreFromCloud({ attempt = 0 } = {}) {
     return 'disabled';
   }
   console.log(`cloud sync: enabled (${cloud.describe()})`);
-  if (!localIsEmpty()) {
-    console.log('cloud sync: local data.json present, keeping it');
-    cloudReady = true;
-    return 'local-kept';
-  }
   let text;
   try {
     text = await cloud.syncDown();
@@ -163,12 +164,18 @@ export async function restoreFromCloud({ attempt = 0 } = {}) {
     cloudReady = true;
     return 'invalid';
   }
-  writeAtomic(FILE, text);
-  db = obj;
-  dirty = false;
+  const localRooms = roomCount(db);
+  const remoteRooms = roomCount(obj);
   cloudReady = true;
-  console.log('cloud sync: restored data.json from GitHub');
-  return 'restored';
+  if (remoteRooms > localRooms) {
+    writeAtomic(FILE, text);
+    db = obj;
+    dirty = false;
+    console.log(`cloud sync: restored data.json from GitHub (${remoteRooms} leagues, local had ${localRooms})`);
+    return 'restored';
+  }
+  console.log(`cloud sync: local has ${localRooms} leagues, remote has ${remoteRooms}, keeping local`);
+  return 'local-kept';
 }
 
 // Pushes the latest data to GitHub at most once per minute. Fire-and-forget: failures are logged only.
