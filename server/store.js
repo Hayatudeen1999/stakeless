@@ -164,6 +164,26 @@ export async function restoreFromCloud({ attempt = 0 } = {}) {
     cloudReady = true;
     return 'invalid';
   }
+  // Tombstones: a league deleted on either side stays deleted. Union the tombstones, then drop
+  // any league that has one, so a deleted league cannot come back from the GitHub copy.
+  const tombs = { ...(obj.deletedRooms || {}), ...(db.deletedRooms || {}) };
+  if (Object.keys(tombs).length) {
+    obj.deletedRooms = tombs;
+    for (const code of Object.keys(tombs)) {
+      if (obj.rooms?.[code]) delete obj.rooms[code];
+      if (Array.isArray(obj.predictions)) obj.predictions = obj.predictions.filter((p) => p.roomCode !== code);
+      for (const key of ['chats', 'duels', 'streaks', 'shame']) if (obj[key]) delete obj[key][code];
+    }
+    for (const code of Object.keys(tombs)) {
+      if (db.rooms?.[code]) {
+        delete db.rooms[code];
+        db.predictions = db.predictions.filter((p) => p.roomCode !== code);
+        for (const key of ['chats', 'duels', 'streaks', 'shame']) if (db[key]) delete db[key][code];
+      }
+    }
+    db.deletedRooms = tombs;
+    obj.deletedRooms = tombs;
+  }
   const localRooms = roomCount(db);
   const remoteRooms = roomCount(obj);
   cloudReady = true;
@@ -254,6 +274,16 @@ export function nextId() {
 }
 
 // Used by the shutdown handlers so a clean stop never loses the last batch.
+// Delete must reach GitHub right away, not after the 1-minute push debounce, so a redeploy
+// in that window cannot restore the league from an older cloud copy.
+export function flushAndSyncNow() {
+  flushNow({ backup: true });
+  if (cloud.enabled && cloudReady) {
+    return cloud.syncUp(db).catch((err) => console.error('[cloudsync] delete sync failed:', err.message));
+  }
+  return Promise.resolve();
+}
+
 export function flushOnExit() {
   try { flushNow({ backup: true }); } catch (err) { console.error('[store] final flush failed:', err.message); }
 }

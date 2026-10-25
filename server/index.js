@@ -7,9 +7,9 @@ import { CONFIG, LEAGUES } from './config.js';
 import {
   createRoom, joinRoom, getRoom, listFixtures, predict, settleFinished, standings, myPredictions,
   postChat, listChat, duelsView, ensureStreakStore, ensureAllDuels, h2h,
-  roomStatus, listMembers, setApproval, approveMember, kickMember,
+  roomStatus, listMembers, setApproval, approveMember, kickMember, deleteRoom,
 } from './rooms.js';
-import { flushOnExit, restoreFromCloud, data } from './store.js';
+import { flushOnExit, flushAndSyncNow, restoreFromCloud, data } from './store.js';
 import { allow, clientIp } from './ratelimit.js';
 import { dailyPicks } from './picks.js';
 import * as cloud from './cloudsync.js';
@@ -103,6 +103,13 @@ async function api(req, res, url) {
   }
   if (p === '/api/rooms' && m === 'POST') return send(res, 200, createRoom(await readBody(req)));
   if (p === '/api/rooms/join' && m === 'POST') return send(res, 200, joinRoom(await readBody(req)));
+  const delMatch = p.match(/^\/api\/rooms\/([A-Z0-9]{6})\/delete$/);
+  if (delMatch && m === 'POST') {
+    const b = await readBody(req);
+    const out = deleteRoom({ code: delMatch[1], ...b });
+    await flushAndSyncNow();
+    return send(res, 200, out);
+  }
 
   // Voice notes: stream a chat audio blob back to league members. Ids are unguessable
   // and the room membership is still checked, so audio never leaks outside the room.

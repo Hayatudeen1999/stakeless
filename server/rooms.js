@@ -141,6 +141,25 @@ export function approveMember({ code, memberId, targetId }) {
   return { approved: t.name };
 }
 
+// Owner deletes the whole league. Irreversible: removes the league and everything in it
+// (members, predictions, chat, duels, streaks, shame log), and records a tombstone so a
+// cloud restore or later push cannot bring it back.
+export function deleteRoom({ code, memberId, confirm }) {
+  const room = getRoom(code);
+  requireOwner(room, memberId);
+  if (confirm !== code) throw new Error('Type the league code to confirm deletion.');
+  const db = data();
+  db.deletedRooms ||= {};
+  db.deletedRooms[code] = new Date().toISOString();
+  delete db.rooms[code];
+  db.predictions = db.predictions.filter((p) => p.roomCode !== code);
+  for (const key of ['chats', 'duels', 'streaks', 'shame']) {
+    if (db[key]) delete db[key][code];
+  }
+  save();
+  return { deleted: code };
+}
+
 // Owner removes a member. Their predictions and streak go with them, and any unfinished duel
 // they were in gives the opponent a bye for the week.
 export function kickMember({ code, memberId, targetId }) {
@@ -202,14 +221,19 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   if (fixture.status === 'VOID') throw new Error('This match was postponed or cancelled, so picks are closed.');
   if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Predictions are locked at kickoff.');
   if (!['H', 'D', 'A'].includes(pick)) throw new Error('Pick must be H, D or A.');
-  // Daily caps: at most 2 picks per league, 8 total, per member per day.
-  const today = new Date().toISOString().slice(0, 10);
-  const todays = data().predictions.filter((p) => p.roomCode === code && p.memberId === Number(memberId) && (p.createdAt || '').slice(0, 10) === today && p.fixtureId !== fixtureId);
-  const compOf = (fid) => (fixtures || []).find((f) => f.id === fid)?.competition;
-  const thisComp = compOf(fixtureId);
-  if (todays.length >= 8) throw new Error('Daily limit reached: 8 picks per day. Come back tomorrow.');
-  const compCount = todays.filter((p) => compOf(p.fixtureId) === thisComp).length;
-  if (compCount >= 2) throw new Error('League limit reached: at most 2 picks per league per day.');
+  // Daily cap: at most 2 picks per league per game day, per member. The day is the fixture's
+  // kickoff date (UTC), so picks for the same day's games are counted together.
+  const dayOf = (fid) => {
+    const f = fixtures.find((x) => x.id === fid);
+    return f?.kickoff ? new Date(f.kickoff).toISOString().slice(0, 10) : null;
+  };
+  const compOf = (fid) => fixtures.find((x) => x.id === fid)?.competition;
+  const thisComp = fixture.competition;
+  const thisDay = dayOf(fixtureId);
+  const sameLeagueDay = data().predictions.filter((p) =>
+    p.roomCode === code && p.memberId === Number(memberId) && p.fixtureId !== fixtureId
+    && compOf(p.fixtureId) === thisComp && dayOf(p.fixtureId) === thisDay);
+  if (sameLeagueDay.length >= 2) throw new Error('max 2 picks per league per day');
   const store = data().predictions;
   const existing = store.find((p) => p.roomCode === code && p.memberId === Number(memberId) && p.fixtureId === fixtureId);
   const exact = hg !== '' && hg != null && ag !== '' && ag != null;
