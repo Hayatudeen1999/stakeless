@@ -12,6 +12,7 @@ import {
 import { flushOnExit, flushAndSyncNow, restoreFromCloud, data } from './store.js';
 import { allow, clientIp } from './ratelimit.js';
 import { dailyPicks } from './picks.js';
+import { leagueRules } from './scoring.js';
 import * as cloud from './cloudsync.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -110,6 +111,7 @@ async function api(req, res, url) {
   }
   if (p === '/api/leagues' && m === 'GET') return send(res, 200, { leagues: LEAGUES });
   if (p === '/api/share-config' && m === 'GET') return send(res, 200, { appUrl: CONFIG.appUrl || '' });
+  if (p === '/api/league-rules' && m === 'GET') return send(res, 200, leagueRules());
   if (p === '/api/daily-picks' && m === 'GET') return send(res, 200, await dailyPicks({}));
   if (p === '/api/house-ads' && m === 'GET') {
     const list = Array.isArray(CONFIG.houseAds) ? CONFIG.houseAds : (CONFIG.houseAd ? [CONFIG.houseAd] : []);

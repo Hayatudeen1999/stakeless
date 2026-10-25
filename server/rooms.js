@@ -3,11 +3,14 @@ import { data, save, nextId } from './store.js';
 import { LEAGUES } from './config.js';
 import * as cloud from './cloudsync.js';
 import { getFixtures } from './football.js';
+import { SCORING } from './scoring.js';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const POINTS_OUTCOME = 3;
-const POINTS_EXACT_BONUS = 2;
-const LOCK_SECONDS = 0;
+// Scoring constants live in scoring.js (shared with the League rules text).
+const POINTS_OUTCOME = SCORING.pointsCorrectResult;
+const POINTS_EXACT_BONUS = SCORING.pointsExactBonus;
+const LOCK_SECONDS = SCORING.lockSeconds;
+const MAX_PICKS_PER_DAY = SCORING.maxPicksPerLeagueDay;
 const NAME_MAX = 24;
 const ROOM_NAME_MAX = 40;
 const CHAT_MAX = 300;
@@ -289,7 +292,7 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   const sameLeagueDay = data().predictions.filter((p) =>
     p.roomCode === code && p.memberId === Number(memberId) && p.fixtureId !== fixtureId
     && compOf(p.fixtureId) === thisComp && dayOf(p.fixtureId) === thisDay);
-  if (sameLeagueDay.length >= 2) throw new Error('max 2 picks per league per day');
+  if (sameLeagueDay.length >= MAX_PICKS_PER_DAY) throw new Error(`max ${MAX_PICKS_PER_DAY} picks per league per day`);
   const store = data().predictions;
   const existing = store.find((p) => p.roomCode === code && p.memberId === Number(memberId) && p.fixtureId === fixtureId);
   const exact = hg !== '' && hg != null && ag !== '' && ag != null;
@@ -494,7 +497,7 @@ function pushSettlementAlerts(fresh, finishedById) {
       if (!f || seen.has(f.id)) continue;
       seen.add(f.id);
       const all = db.predictions.filter((x) => x.fixtureId === f.id && x.settled && x.roomCode === code);
-      const nailed = all.filter((x) => x.points >= 3).length;
+      const nailed = all.filter((x) => x.points >= POINTS_OUTCOME).length;
       const line = `FULL-TIME ${f.home} ${f.homeScore}-${f.awayScore} ${f.away}. ${all.length} picked it, ${nailed} nailed it.`;
       list.push({ id: nextId(), memberId: 0, name: 'StakeLess', text: line, at: new Date().toISOString(), system: true });
     }
@@ -788,13 +791,16 @@ export function listChat(code, since = 0, memberId) {
   const byId = new Map(all.map((x) => [x.id, x]));
   // Resolve each reply's quoted original so clients can render the quote without a second call.
   // A trimmed or deleted original comes back as { missing: true }.
+  // Quote shows the author's CURRENT league name (live from members), so a rename shows up in
+  // replies right away. Falls back to the posted name only if that member is gone (left/kicked).
+  const liveNames = new Map(room.members.map((x) => [x.id, x.name]));
   const quoteOf = (m) => {
     if (!m.replyTo) return null;
     const orig = byId.get(m.replyTo);
     if (!orig) return { id: m.replyTo, missing: true };
     return {
       id: orig.id,
-      name: orig.name,
+      name: liveNames.get(orig.memberId) || orig.name,
       snippet: orig.audio && !orig.text ? '' : String(orig.text || '').slice(0, 120),
       voice: !!orig.audio,
       missing: false,

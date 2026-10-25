@@ -1,8 +1,540 @@
 {
-  "rooms": {},
-  "predictions": [],
+  "rooms": {
+    "2LU9J6": {
+      "code": "2LU9J6",
+      "name": "Banga Boys",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:13:55.848Z",
+      "ownerId": 2,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 2,
+          "name": "Owner",
+          "status": "active"
+        },
+        {
+          "id": 3,
+          "name": "Mem Two",
+          "status": "active"
+        },
+        {
+          "id": 4,
+          "name": "Other",
+          "status": "active"
+        }
+      ]
+    },
+    "AWS8S8": {
+      "code": "AWS8S8",
+      "name": "Leave League",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:13:56.145Z",
+      "ownerId": 9,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 9,
+          "name": "Owner",
+          "status": "active"
+        },
+        {
+          "id": 11,
+          "name": "Stayer",
+          "status": "active"
+        }
+      ]
+    },
+    "QRW4PQ": {
+      "code": "QRW4PQ",
+      "name": "Mock",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:13:56.441Z",
+      "ownerId": 14,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 14,
+          "name": "Ann",
+          "status": "active"
+        },
+        {
+          "id": 15,
+          "name": "Ben Two",
+          "status": "active"
+        }
+      ]
+    },
+    "9YK4YV": {
+      "code": "9YK4YV",
+      "name": "Reply Mock A",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:13:56.733Z",
+      "ownerId": 16,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 16,
+          "name": "Ann",
+          "status": "active"
+        },
+        {
+          "id": 18,
+          "name": "Ben",
+          "status": "active"
+        }
+      ]
+    },
+    "G4MPYZ": {
+      "code": "G4MPYZ",
+      "name": "Reply Mock B",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:13:56.733Z",
+      "ownerId": 17,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 17,
+          "name": "Zed",
+          "status": "active"
+        }
+      ]
+    },
+    "D4NZMN": {
+      "code": "D4NZMN",
+      "name": "Third Name",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:13:57.025Z",
+      "ownerId": 25,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 25,
+          "name": "Owner",
+          "status": "active"
+        },
+        {
+          "id": 26,
+          "name": "Member",
+          "status": "active"
+        }
+      ]
+    },
+    "ZDWTEZ": {
+      "code": "ZDWTEZ",
+      "name": "Banga Boys",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:17:19.187Z",
+      "ownerId": 27,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 27,
+          "name": "Owner",
+          "status": "active"
+        },
+        {
+          "id": 28,
+          "name": "Mem Two",
+          "status": "active"
+        },
+        {
+          "id": 29,
+          "name": "Other",
+          "status": "active"
+        }
+      ]
+    },
+    "KF3M7L": {
+      "code": "KF3M7L",
+      "name": "Leave League",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:17:19.479Z",
+      "ownerId": 34,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 34,
+          "name": "Owner",
+          "status": "active"
+        },
+        {
+          "id": 36,
+          "name": "Stayer",
+          "status": "active"
+        }
+      ]
+    },
+    "99WGLX": {
+      "code": "99WGLX",
+      "name": "Mock",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:17:19.773Z",
+      "ownerId": 39,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 39,
+          "name": "Ann",
+          "status": "active"
+        },
+        {
+          "id": 40,
+          "name": "Ben Two",
+          "status": "active"
+        }
+      ]
+    },
+    "D7S4WC": {
+      "code": "D7S4WC",
+      "name": "Reply Mock A",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:17:20.086Z",
+      "ownerId": 41,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 41,
+          "name": "Ann",
+          "status": "active"
+        },
+        {
+          "id": 43,
+          "name": "Ben",
+          "status": "active"
+        }
+      ]
+    },
+    "TK4BFS": {
+      "code": "TK4BFS",
+      "name": "Reply Mock B",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:17:20.087Z",
+      "ownerId": 42,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 42,
+          "name": "Zed",
+          "status": "active"
+        }
+      ]
+    },
+    "C8ZV74": {
+      "code": "C8ZV74",
+      "name": "Third Name",
+      "competitions": [
+        "PL",
+        "PD",
+        "SA",
+        "BL1",
+        "FL1",
+        "CL",
+        "DED",
+        "PPL"
+      ],
+      "createdAt": "2026-10-25T09:17:20.383Z",
+      "ownerId": 50,
+      "approvalRequired": false,
+      "members": [
+        {
+          "id": 50,
+          "name": "Owner",
+          "status": "active"
+        },
+        {
+          "id": 51,
+          "name": "Member",
+          "status": "active"
+        }
+      ]
+    }
+  },
+  "predictions": [
+    {
+      "id": 5,
+      "roomCode": "2LU9J6",
+      "memberId": 3,
+      "fixtureId": "a1",
+      "pick": "A",
+      "hg": 1,
+      "ag": 2,
+      "points": null,
+      "settled": false,
+      "void": false,
+      "createdAt": "2026-10-25T09:13:55.850Z"
+    },
+    {
+      "id": 7,
+      "roomCode": "2LU9J6",
+      "memberId": 3,
+      "fixtureId": "a3",
+      "pick": "D",
+      "hg": null,
+      "ag": null,
+      "points": null,
+      "settled": false,
+      "void": false,
+      "createdAt": "2026-10-25T09:13:55.851Z"
+    },
+    {
+      "id": 8,
+      "roomCode": "2LU9J6",
+      "memberId": 3,
+      "fixtureId": "b1",
+      "pick": "A",
+      "hg": null,
+      "ag": null,
+      "points": null,
+      "settled": false,
+      "void": false,
+      "createdAt": "2026-10-25T09:13:55.850Z"
+    },
+    {
+      "id": 30,
+      "roomCode": "ZDWTEZ",
+      "memberId": 28,
+      "fixtureId": "a1",
+      "pick": "A",
+      "hg": 1,
+      "ag": 2,
+      "points": null,
+      "settled": false,
+      "void": false,
+      "createdAt": "2026-10-25T09:17:19.188Z"
+    },
+    {
+      "id": 32,
+      "roomCode": "ZDWTEZ",
+      "memberId": 28,
+      "fixtureId": "a3",
+      "pick": "D",
+      "hg": null,
+      "ag": null,
+      "points": null,
+      "settled": false,
+      "void": false,
+      "createdAt": "2026-10-25T09:17:19.189Z"
+    },
+    {
+      "id": 33,
+      "roomCode": "ZDWTEZ",
+      "memberId": 28,
+      "fixtureId": "b1",
+      "pick": "A",
+      "hg": null,
+      "ag": null,
+      "points": null,
+      "settled": false,
+      "void": false,
+      "createdAt": "2026-10-25T09:17:19.189Z"
+    }
+  ],
   "settledFixtures": {},
-  "nextId": 1,
-  "streaks": {},
-  "streaksVersion": 1
+  "nextId": 51,
+  "chats": {
+    "9YK4YV": [
+      {
+        "id": 20,
+        "memberId": 18,
+        "name": "Ben",
+        "text": "no chance",
+        "at": "2026-10-25T09:13:56.734Z",
+        "replyTo": 19
+      },
+      {
+        "id": 21,
+        "memberId": 16,
+        "name": "Ann",
+        "text": "plain",
+        "at": "2026-10-25T09:13:56.736Z"
+      },
+      {
+        "id": 22,
+        "memberId": 16,
+        "name": "Ann",
+        "text": "empty reply field",
+        "at": "2026-10-25T09:13:56.736Z"
+      },
+      {
+        "id": 1022,
+        "memberId": 18,
+        "name": "Ben",
+        "text": "",
+        "at": "2026-10-25T09:13:56.736Z",
+        "audio": {
+          "id": "vn-test",
+          "mime": "audio/webm"
+        }
+      },
+      {
+        "id": 24,
+        "memberId": 16,
+        "name": "Ann",
+        "text": "lol",
+        "at": "2026-10-25T09:13:56.736Z",
+        "replyTo": 1022
+      }
+    ],
+    "G4MPYZ": [
+      {
+        "id": 23,
+        "memberId": 17,
+        "name": "Zed",
+        "text": "league B secret",
+        "at": "2026-10-25T09:13:56.736Z"
+      }
+    ],
+    "D7S4WC": [
+      {
+        "id": 45,
+        "memberId": 43,
+        "name": "Ben",
+        "text": "no chance",
+        "at": "2026-10-25T09:17:20.087Z",
+        "replyTo": 44
+      },
+      {
+        "id": 46,
+        "memberId": 41,
+        "name": "Ann",
+        "text": "plain",
+        "at": "2026-10-25T09:17:20.089Z"
+      },
+      {
+        "id": 47,
+        "memberId": 41,
+        "name": "Ann",
+        "text": "empty reply field",
+        "at": "2026-10-25T09:17:20.089Z"
+      },
+      {
+        "id": 1047,
+        "memberId": 43,
+        "name": "Ben",
+        "text": "",
+        "at": "2026-10-25T09:17:20.090Z",
+        "audio": {
+          "id": "vn-test",
+          "mime": "audio/webm"
+        }
+      },
+      {
+        "id": 49,
+        "memberId": 41,
+        "name": "Ann",
+        "text": "lol",
+        "at": "2026-10-25T09:17:20.090Z",
+        "replyTo": 1047
+      }
+    ],
+    "TK4BFS": [
+      {
+        "id": 48,
+        "memberId": 42,
+        "name": "Zed",
+        "text": "league B secret",
+        "at": "2026-10-25T09:17:20.090Z"
+      }
+    ]
+  }
 }
