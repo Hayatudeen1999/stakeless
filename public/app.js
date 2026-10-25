@@ -188,7 +188,10 @@ function home() {
     ${mine.length ? `<div class="card"><h3>Your leagues</h3>${mine.map((r) =>
       `<div class="league-row">
         <span>${esc(r.name)} <span class="muted">(${esc(r.code)})</span></span>
-        <button data-open="${esc(r.code)}" class="secondary">Open</button>
+        <span class="row" style="gap:6px">
+          <button data-open="${esc(r.code)}" class="secondary">Open</button>
+          <button data-leave="${esc(r.code)}" class="secondary">Leave</button>
+        </span>
       </div>`).join('')}</div>` : ''}
     <div class="card" id="picks-card"><h3>Today's picks</h3><p class="muted">Loading…</p></div>`;
   loadDailyPicks();
@@ -197,6 +200,19 @@ function home() {
   app.querySelectorAll('[data-open]').forEach((b) => b.onclick = () => {
     const r = rooms().find((x) => x.code === b.dataset.open);
     openRoom(r);
+  });
+  // Leave: members only. Confirm first. Owners see no button and are refused by the server anyway.
+  app.querySelectorAll('[data-leave]').forEach((b) => b.onclick = async () => {
+    const r = rooms().find((x) => x.code === b.dataset.leave);
+    if (!r) return;
+    if (!confirm(`Leave "${r.name || r.code}"? Your predictions and streak in this league go with you. You can rejoin with the code later.`)) return;
+    try {
+      const out = await api(`/api/rooms/${r.code}/leave`, { memberId: r.memberId });
+      if (out.left || out.reason === 'not_member' || out.reason === 'not_found') {
+        localStorage.setItem(KEY, JSON.stringify(rooms().filter((x) => x.code !== r.code)));
+        home();
+      }
+    } catch (x) { showBanner(x.message); }
   });
 }
 
@@ -312,7 +328,6 @@ async function renderRoom() {
   catch (e) { statusError = e; }
   if (seq !== roomSeq || current !== r) return;
   const isOwner = !!(st && st.isOwner);
-  if (tab === 'settings' && !isOwner) tab = 'fixtures';
   app.innerHTML = `
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
       <div><strong>${esc(r.name)}</strong> <span class="muted">code ${esc(r.code)}</span></div>
@@ -325,7 +340,7 @@ async function renderRoom() {
       <button data-tab="duels" class="${tab === 'duels' ? 'active' : ''}">Duels</button>
       <button data-tab="chat" class="${tab === 'chat' ? 'active' : ''}">Chat</button>
       <button data-tab="mine" class="${tab === 'mine' ? 'active' : ''}">My predictions</button>
-      ${isOwner ? `<button data-tab="settings" class="${tab === 'settings' ? 'active' : ''}">Settings</button>` : ''}
+      <button data-tab="settings" class="${tab === 'settings' ? 'active' : ''}">Settings</button>
     </div>
     <div id="panel"><p class="muted">Loading...</p></div>`;
   document.getElementById('home').onclick = home;
@@ -357,21 +372,38 @@ function fmtKick(iso) {
   return { local, wat };
 }
 
-// Owner-only Settings tab: approval toggle, pending requests, members, kick, delete league.
-// Only offered in the tab row to the owner (see renderRoom). Draws into #panel like the other tabs.
+// Settings tab, for every member. Everyone gets their own display name in this league.
+// The owner also gets the league card: rename, approval toggle, pending requests, members, kick, delete.
 async function renderSettings() {
   const panel = document.getElementById('panel');
-  const { members } = await api(`/api/rooms/${current.code}/members?member=${current.memberId}`);
+  const status = await api(`/api/rooms/${current.code}/status?member=${current.memberId}`);
+  const isOwner = !!status.isOwner;
+  let members = [];
+  if (isOwner) ({ members } = await api(`/api/rooms/${current.code}/members?member=${current.memberId}`));
   const pending = members.filter((m) => m.status === 'pending');
   const others = members.filter((m) => !m.owner && m.status === 'active');
-  const status = await api(`/api/rooms/${current.code}/status?member=${current.memberId}`);
   // The user may have switched tabs while the calls above were in flight: do not draw over the newer tab.
   if (tab !== 'settings' || !document.getElementById('panel')) return;
   const row = (m, actions) => `<div class="league-row"><span>${esc(m.name)}${m.owner ? ' <span class="muted">(owner)</span>' : ''}</span><span class="row">${actions}</span></div>`;
+  const myName = status.myName || current.playerName || '';
+  const memberCard = `
+    <div class="card my-settings">
+      <div class="kicker">Your settings</div>
+      <h3>Your name in this league</h3>
+      <input id="my-name" maxlength="24" value="${esc(myName)}" aria-label="Your display name" />
+      <div class="row"><button id="save-my-name">Save name</button></div>
+      <p class="muted">Shows on the standings, chat and duels. Names must be unique in the league.</p>
+      <p class="error" id="my-err"></p>
+    </div>`;
+  if (!isOwner) { panel.innerHTML = memberCard; bindMemberName(); return; }
   // innerHTML (not insertAdjacentHTML) so a repeat render replaces the card instead of stacking a second one.
-  panel.innerHTML = `
+  panel.innerHTML = memberCard + `
     <div class="card room-settings">
       <div class="kicker">Room settings</div>
+      <h3>League name</h3>
+      <input id="room-rename" maxlength="40" value="${esc(current.name || status.name || '')}" aria-label="League name" />
+      <div class="row"><button id="save-room-name">Save league name</button></div>
+      <p class="error" id="rename-err"></p>
       <label class="toggle-row"><input type="checkbox" id="approval-toggle" ${status.approvalRequired ? 'checked' : ''} /> <span>Approval required to join</span></label>
       <p class="muted">When on, new joiners wait as pending until you approve them.</p>
       ${pending.length ? `<h3>Pending requests</h3>${pending.map((m) => row(m, `<button data-approve="${m.id}">Approve</button><button class="secondary" data-kick="${m.id}">Decline</button>`)).join('')}` : '<p class="muted">No pending requests.</p>'}
@@ -410,6 +442,33 @@ async function renderSettings() {
     try { await api(`/api/rooms/${current.code}/kick`, { memberId: current.memberId, targetId: Number(b.dataset.kick) }); renderRoom(); }
     catch (x) { err(x.message); }
   });
+  bindMemberName();
+  document.getElementById('save-room-name').onclick = async () => {
+    const box = document.getElementById('rename-err');
+    try {
+      const { name } = await api(`/api/rooms/${current.code}/rename`, { memberId: current.memberId, name: document.getElementById('room-rename').value });
+      current.name = name;
+      const saved = rooms().map((x) => (x.code === current.code ? { ...x, name } : x));
+      localStorage.setItem(KEY, JSON.stringify(saved));
+      renderRoom();
+    } catch (x) { box.textContent = x.message; }
+  };
+}
+
+// Your own name in this league. Saves locally after a successful rename so the next open shows it.
+function bindMemberName() {
+  const btn = document.getElementById('save-my-name');
+  if (!btn) return;
+  btn.onclick = async () => {
+    const box = document.getElementById('my-err');
+    try {
+      const { name } = await api(`/api/rooms/${current.code}/member-name`, { memberId: current.memberId, name: document.getElementById('my-name').value });
+      current.playerName = name;
+      const saved = rooms().map((x) => (x.code === current.code ? { ...x, playerName: name } : x));
+      localStorage.setItem(KEY, JSON.stringify(saved));
+      renderRoom();
+    } catch (x) { box.textContent = x.message; }
+  };
 }
 
 // League filter for the fixtures view. The choice (a competition code, or '' for All leagues) persists in localStorage.
