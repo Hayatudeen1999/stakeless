@@ -14,7 +14,7 @@ import { allow, clientIp } from './ratelimit.js';
 import { dailyPicks } from './picks.js';
 import { leagueRules } from './scoring.js';
 import * as cloud from './cloudsync.js';
-import { getProfile, updateProfile, PROFILE_IMAGE_MAX, PROFILE_IMAGE_DIR } from './profiles.js';
+import { getProfile, profileForMember, updateProfile, PROFILE_IMAGE_MAX, PROFILE_IMAGE_DIR } from './profiles.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, '..', 'public');
