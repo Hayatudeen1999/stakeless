@@ -4,6 +4,7 @@ import { LEAGUES } from './config.js';
 import * as cloud from './cloudsync.js';
 import { getFixtures } from './football.js';
 import { SCORING } from './scoring.js';
+import { profileForMember } from './profiles.js';
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 // Scoring constants live in scoring.js (shared with the League rules text).
@@ -283,10 +284,10 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   // Daily cap: at most 2 picks per league per game day, per member. The day is the fixture's
   // kickoff date (UTC), so picks for the same day's games are counted together.
   const dayOf = (fid) => {
-    const f = fixtures.find((x) => x.id === fid);
+    const f = fixtures.find((x) => String(x.id) === String(fid));
     return f?.kickoff ? new Date(f.kickoff).toISOString().slice(0, 10) : null;
   };
-  const compOf = (fid) => fixtures.find((x) => x.id === fid)?.competition;
+  const compOf = (fid) => fixtures.find((x) => String(x.id) === String(fid))?.competition;
   const thisComp = fixture.competition;
   const thisDay = dayOf(fixtureId);
   const sameLeagueDay = data().predictions.filter((p) =>
@@ -312,6 +313,54 @@ export function predict({ code, memberId, fixtureId, pick, hg, ag }, fixtures) {
   else store.push({ id: nextId(), ...row });
   save();
   return row;
+}
+
+export function savePredictionBatch({ code, memberId, picks = [] }, fixtures) {
+  const room = getRoom(code);
+  requireActive(room, memberId);
+  if (!Array.isArray(picks) || picks.length > 200) throw new Error('Invalid batch of predictions.');
+  const ids = new Set();
+  const desired = new Map();
+  for (const item of picks) {
+    const id = String(item?.fixtureId ?? '');
+    if (!id || ids.has(id)) throw new Error('Each match can only appear once in Save all.');
+    ids.add(id);
+    const fixture = fixtures.find((f) => String(f.id) === id);
+    if (!fixture) throw new Error('Fixture not found. Refresh the fixtures and try again.');
+    if (fixture.status === 'VOID') throw new Error('This match was postponed or cancelled, so picks are closed.');
+    if (fixture.status === 'FINISHED' || lockedAt(fixture)) throw new Error('Kickoff passed, pick is locked.');
+    if (item.pick != null && !['H', 'D', 'A'].includes(item.pick)) throw new Error('Pick must be H, D or A.');
+    if (item.pick != null && (item.hg !== '' && item.hg != null || item.ag !== '' && item.ag != null)) {
+      for (const score of [item.hg, item.ag]) if (score !== '' && score != null && (!Number.isInteger(Number(score)) || Number(score) < 0 || Number(score) > 20)) throw new Error('Goals must be between 0 and 20.');
+    }
+    desired.set(id, item);
+  }
+  const fixtureById = new Map(fixtures.map((f) => [String(f.id), f]));
+  const counts = new Map();
+  for (const old of data().predictions) {
+    if (old.roomCode !== code || old.memberId !== Number(memberId) || old.settled || desired.has(String(old.fixtureId))) continue;
+    const f = fixtureById.get(String(old.fixtureId));
+    if (!f) continue;
+    const key = `${f.competition}|${new Date(f.kickoff).toISOString().slice(0,10)}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  for (const [id, item] of desired) {
+    if (!item.pick) continue;
+    const f = fixtureById.get(id);
+    const key = `${f.competition}|${new Date(f.kickoff).toISOString().slice(0,10)}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  if ([...counts.values()].some((n) => n > MAX_PICKS_PER_DAY)) throw new Error(`Max ${MAX_PICKS_PER_DAY} picks per league per day. Remove one pick in that league and try again.`);
+  // Validate whole batch first, then apply removals and additions. Existing single-pick endpoint remains unchanged.
+  const results = [];
+  for (const [fixtureId, item] of desired) {
+    const f = fixtureById.get(fixtureId);
+    if (!item.pick) results.push(unpredict({ code, memberId, fixtureId: f.id }, fixtures));
+  }
+  for (const [fixtureId, item] of desired) {
+    if (item.pick) results.push(predict({ code, memberId, fixtureId: fixtureById.get(fixtureId).id, pick: item.pick, hg: item.hg, ag: item.ag }, fixtures));
+  }
+  return { saved: results.length };
 }
 
 // Removes a member's saved pick on one fixture (the user un-ticked it). Idempotent: removing a
@@ -440,7 +489,8 @@ export function standings(code) {
     const weekWon = week.filter((p) => p.points >= POINTS_OUTCOME).length;
     return {
       memberId: m.id,
-      name: m.name,
+      name: profileForMember(m).displayName,
+      avatarUrl: profileForMember(m).avatarUrl,
       points: mine.reduce((s, p) => s + p.points, 0),
       settled: mine.length,
       correct: mine.filter((p) => p.points >= POINTS_OUTCOME).length,

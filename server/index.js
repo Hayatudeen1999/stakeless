@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CONFIG, LEAGUES } from './config.js';
 import {
-  createRoom, joinRoom, getRoom, listFixtures, predict, unpredict, settleFinished, standings, myPredictions,
+  createRoom, joinRoom, getRoom, listFixtures, predict, unpredict, savePredictionBatch, settleFinished, standings, myPredictions,
   postChat, listChat, duelsView, ensureStreakStore, ensureAllDuels, h2h,
   roomStatus, listMembers, setApproval, approveMember, kickMember, deleteRoom, renameRoom, renameMember, leaveRoom,
 } from './rooms.js';
@@ -14,11 +14,14 @@ import { allow, clientIp } from './ratelimit.js';
 import { dailyPicks } from './picks.js';
 import { leagueRules } from './scoring.js';
 import * as cloud from './cloudsync.js';
+import { getProfile, updateProfile, PROFILE_IMAGE_MAX, PROFILE_IMAGE_DIR } from './profiles.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(here, '..', 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const DEFAULT_AVATAR = '/football-mark.svg';
 const BODY_MAX = 600 * 1024; // room-chat voice notes ride along as base64
+const PROFILE_BODY_MAX = Math.ceil(PROFILE_IMAGE_MAX * 4 / 3) + 32 * 1024;
 const RATE_MSG = 'Easy there, too many requests. Give it a few seconds and try again.';
 
 function send(res, code, obj, extra = {}) {
@@ -60,13 +63,13 @@ function serveAudio(res, mime, b64, rangeHeader) {
   return res.end(buf);
 }
 
-function readBody(req) {
+const readBody = (req, limit = BODY_MAX) => {
   return new Promise((resolve, reject) => {
     let raw = '';
     let size = 0;
     req.on('data', (c) => {
       size += c.length;
-      if (size > BODY_MAX) { reject(new HttpError(413, 'That request is too large.')); req.destroy(); return; }
+      if (size > limit) { reject(new HttpError(413, 'That request is too large.')); req.resume(); return; }
       raw += c;
     });
     req.on('end', () => {
@@ -75,7 +78,7 @@ function readBody(req) {
     });
     req.on('error', () => reject(new HttpError(400, 'Could not read that request.')));
   });
-}
+};
 
 const CODE_RE = /^[A-Z0-9]{6}$/;
 
@@ -113,6 +116,25 @@ async function api(req, res, url) {
   if (p === '/api/share-config' && m === 'GET') return send(res, 200, { appUrl: CONFIG.appUrl || '' });
   if (p === '/api/league-rules' && m === 'GET') return send(res, 200, leagueRules());
   if (p === '/api/daily-picks' && m === 'GET') return send(res, 200, await dailyPicks({}));
+  const profileMatch = p.match(/^\/api\/profiles\/([1-9]\d*)$/);
+  if (profileMatch && m === 'GET') {
+    try { return send(res, 200, { profile: { ...getProfile(profileMatch[1]), defaultAvatarUrl: DEFAULT_AVATAR } }); }
+    catch (err) { if (/not found/i.test(err.message)) return send(res, 404, { error: err.message }); throw err; }
+  }
+  if (profileMatch && m === 'POST') {
+    let body;
+    try { body = await readBody(req, PROFILE_BODY_MAX); }
+    catch (err) { if (err instanceof HttpError) return send(res, err.status, { error: err.message }); throw err; }
+    try {
+      const profile = await updateProfile(profileMatch[1], body);
+      await flushAndSyncNow();
+      return send(res, 200, { profile: { ...profile, defaultAvatarUrl: DEFAULT_AVATAR } });
+    } catch (err) {
+      if (/not found/i.test(err.message)) return send(res, 404, { error: err.message });
+      if (/only edit|display name|bio|profile|social|https URL|valid .* profile URL|choose|2 MB/i.test(err.message)) return send(res, 400, { error: err.message });
+      throw err;
+    }
+  }
   if (p === '/api/house-ads' && m === 'GET') {
     const list = Array.isArray(CONFIG.houseAds) ? CONFIG.houseAds : (CONFIG.houseAd ? [CONFIG.houseAd] : []);
     const usable = list.filter((a) => a && typeof a === 'object' && (a.headline || a.image));
@@ -179,13 +201,23 @@ async function api(req, res, url) {
     const me = Number(url.searchParams.get('member')) || null;
     await settleFinished();
     const f = await listFixtures(code, me);
-    const mine = me ? myPredictions(code, me) : [];
+    const allMine = me ? myPredictions(code, me) : [];
+    const fixturesById = new Map(f.fixtures.map((item) => [String(item.id), item]));
+    const mine = allMine.map((pick) => {
+      const fixture = fixturesById.get(String(pick.fixtureId));
+      return fixture ? { ...pick, competition: fixture.competition, kickoff: fixture.kickoff, home: fixture.home, away: fixture.away, status: fixture.status } : pick;
+    });
     return send(res, 200, { room: { code, name: room.name, members: room.members.length, approvalRequired: !!room.approvalRequired }, ...f, mine });
   }
   if (action === 'predict' && m === 'POST') {
     const b = await readBody(req);
     const f = await listFixtures(code, b.memberId);
     return send(res, 200, predict({ code, ...b }, f.fixtures));
+  }
+  if (action === 'save-all' && m === 'POST') {
+    const b = await readBody(req);
+    const f = await listFixtures(code, b.memberId);
+    return send(res, 200, savePredictionBatch({ code, memberId: b.memberId, picks: b.picks }, f.fixtures));
   }
   if (action === 'unpredict' && m === 'POST') {
     const b = await readBody(req);
@@ -194,7 +226,12 @@ async function api(req, res, url) {
   }
   if (action === 'standings' && m === 'GET') {
     await settleFinished();
-    return send(res, 200, { standings: standings(code) });
+    const result = standings(code).map((row) => {
+      const member = getRoom(code).members.find((item) => Number(item.id) === Number(row.memberId));
+      const profile = member ? profileForMember(member) : {};
+      return { ...row, name: profile.displayName || row.name || 'Player', avatarUrl: profile.avatarUrl || DEFAULT_AVATAR };
+    });
+    return send(res, 200, { standings: result });
   }
   if (action === 'h2h' && m === 'GET') {
     return send(res, 200, h2h(code, Number(url.searchParams.get('me')) || 0, Number(url.searchParams.get('other')) || 0));
@@ -216,7 +253,12 @@ async function api(req, res, url) {
   // Owner room settings and member management.
   if (action === 'members' && m === 'GET') {
     const me = Number(url.searchParams.get('member')) || null;
-    return send(res, 200, { members: listMembers(code, me) });
+    const list = listMembers(code, me).map((item) => {
+      const member = getRoom(code).members.find((candidate) => Number(candidate.id) === Number(item.id));
+      const profile = member ? profileForMember(member) : {};
+      return { ...item, name: profile.displayName || item.name || 'Player', avatarUrl: profile.avatarUrl || DEFAULT_AVATAR };
+    });
+    return send(res, 200, { members: list });
   }
   if (action === 'settings' && m === 'POST') {
     const b = await readBody(req);
@@ -258,7 +300,20 @@ function serveStatic(req, res, url) {
   }
   let rel;
   try { rel = decodeURIComponent(url.pathname); } catch { rel = '/'; }
-  const file = path.join(PUBLIC, rel === '/' ? 'index.html' : rel);
+  if (rel.startsWith('/uploads/profiles/')) {
+    const filename = path.basename(rel.slice('/uploads/profiles/'.length));
+    const file = path.join(PROFILE_IMAGE_DIR, filename);
+    if (!/^[1-9]\d*-\d+-[a-z0-9]+\.png$/.test(filename) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Not found');
+    }
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' });
+    if (req.method === 'HEAD') return res.end();
+    return fs.createReadStream(file).pipe(res);
+  }
+  let relPath;
+  try { relPath = decodeURIComponent(url.pathname); } catch { relPath = '/'; }
+  const file = path.join(PUBLIC, relPath === '/' ? 'index.html' : relPath);
   if (!file.startsWith(PUBLIC + path.sep) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end('Not found');
