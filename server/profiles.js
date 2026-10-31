@@ -6,7 +6,7 @@ import { data, save } from './store.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const PROFILE_IMAGE_DIR = path.join(ROOT, '..', 'public', 'uploads', 'profiles');
-export const PROFILE_IMAGE_MAX = 2 * 1024 * 1024;
+export const PROFILE_IMAGE_MAX = 10 * 1024 * 1024;
 export const BIO_MAX = 140;
 export const PROFILE_NAME_MAX = 32;
 const HOSTS = {
@@ -90,7 +90,7 @@ export async function updateProfile(id, input = {}) {
     if (!match) throw new Error('Choose a PNG, JPG or WebP image.');
     const bytes = Buffer.from(match[2], 'base64');
     if (!bytes.length || bytes.length > PROFILE_IMAGE_MAX || bytes.toString('base64').replace(/=+$/, '') !== match[2].replace(/=+$/, '')) {
-      throw new Error('Profile pictures must be no larger than 2 MB.');
+      throw new Error('Profile pictures must be no larger than 10 MB.');
     }
     const format = match[1];
     const signatures = {
