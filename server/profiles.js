@@ -1,7 +1,6 @@
 // Additive per-member profiles. Existing room/member records are not rewritten.
 import fs from 'node:fs';
 import path from 'node:path';
-import sharp from 'sharp';
 import { fileURLToPath } from 'node:url';
 import { data, save } from './store.js';
 
@@ -93,18 +92,25 @@ export async function updateProfile(id, input = {}) {
     if (!bytes.length || bytes.length > PROFILE_IMAGE_MAX || bytes.toString('base64').replace(/=+$/, '') !== match[2].replace(/=+$/, '')) {
       throw new Error('Profile pictures must be no larger than 2 MB.');
     }
-    let image;
+    const format = match[1];
+    const signatures = {
+      png: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      jpeg: Buffer.from([0xff, 0xd8, 0xff]),
+      webp: Buffer.from('RIFF'),
+    };
+    const signature = signatures[format];
+    const validSignature = bytes.length >= signature.length && bytes.subarray(0, signature.length).equals(signature)
+      && (format !== 'webp' || (bytes.length >= 12 && bytes.toString('ascii', 8, 12) === 'WEBP'));
+    if (!validSignature) throw new Error('Choose a valid PNG, JPG or WebP image.');
+    fs.mkdirSync(PROFILE_IMAGE_DIR, { recursive: true });
+    const ext = format === 'jpeg' ? 'jpg' : format;
+    avatarFile = `${Number(id)}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+    const dest = path.join(PROFILE_IMAGE_DIR, avatarFile);
     try {
-      image = sharp(bytes, { limitInputPixels: 20_000_000, failOn: 'error' });
-      const meta = await image.metadata();
-      if (!['png', 'jpeg', 'webp'].includes(meta.format)) throw new Error('unsupported format');
-      fs.mkdirSync(PROFILE_IMAGE_DIR, { recursive: true });
-      avatarFile = `${Number(id)}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.png`;
-      const dest = path.join(PROFILE_IMAGE_DIR, avatarFile);
-      await image.rotate().resize(256, 256, { fit: 'cover', position: 'attention' }).png({ compressionLevel: 9 }).toFile(dest);
-    } catch (err) {
-      if (avatarFile) { try { fs.unlinkSync(path.join(PROFILE_IMAGE_DIR, avatarFile)); } catch {} }
-      throw new Error(err.message?.includes('unsupported format') ? 'Choose a valid PNG, JPG or WebP image.' : 'Could not process that image. Choose a valid PNG, JPG or WebP file.');
+      fs.writeFileSync(dest, bytes, { flag: 'wx' });
+    } catch {
+      avatarFile = undefined;
+      throw new Error('Could not save that image. Choose a valid PNG, JPG or WebP file.');
     }
   }
   const db = data();
