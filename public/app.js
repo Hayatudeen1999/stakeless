@@ -1,6 +1,9 @@
 // Frontend: home, create/join, league view with Fixtures, Standings, Room chat, My predictions tabs.
 import { applyLiveNames } from './league-names.js';
 import { hasSeenRules, markRulesSeen, rulesBodyHTML } from './rules.js';
+import './profiles-ui.js';
+
+const DEFAULT_AVATAR = '/football-mark.svg';
 const app = document.getElementById('app');
 const badge = document.getElementById('badge');
 const KEY = 'stakeless.rooms';
@@ -471,13 +474,12 @@ async function renderSettings() {
   const panel = document.getElementById('panel');
   const status = await api(`/api/rooms/${current.code}/status?member=${current.memberId}`);
   const isOwner = !!status.isOwner;
-  let members = [];
-  if (isOwner) ({ members } = await api(`/api/rooms/${current.code}/members?member=${current.memberId}`));
+  const members = (await api(`/api/rooms/${current.code}/members?member=${current.memberId}`)).members || [];
   const pending = members.filter((m) => m.status === 'pending');
   const others = members.filter((m) => !m.owner && m.status === 'active');
   // The user may have switched tabs while the calls above were in flight: do not draw over the newer tab.
   if (tab !== 'settings' || !document.getElementById('panel')) return;
-  const row = (m, actions) => `<div class="league-row"><span>${esc(m.name)}${m.owner ? ' <span class="muted">(owner)</span>' : ''}</span><span class="row">${actions}</span></div>`;
+  const row = (m, actions) => `<div class="league-row"><span class="member-profile-row"><img class="profile-avatar-small" src="${esc(m.avatarUrl || DEFAULT_AVATAR)}" alt="" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'"><span class="h2h-link" data-profile="${m.id}"${m.id === current.memberId ? ` data-own-profile="${current.memberId}"` : ''}>${esc(m.name)}${m.owner ? ' <span class="muted">(owner)</span>' : ''}</span></span><span class="row">${actions}</span></div>`;
   const myName = status.myName || current.playerName || '';
   // League rules card: same text as the popup, from the server (built from server/scoring.js).
   const rulesCardHTML = `<div class="card rules-card" id="rules-card"><div class="kicker">League rules</div><h3>How the game works</h3><div id="rules-card-body"><p class="muted">Loading…</p></div><div class="row" style="margin-top:12px"><button class="secondary" id="open-rules-modal">Open as popup</button></div></div>`;
@@ -496,7 +498,7 @@ async function renderSettings() {
       <div class="kicker">Your settings</div>
       <h3>Your name in this league</h3>
       <input id="my-name" maxlength="24" value="${esc(myName)}" aria-label="Your display name" />
-      <div class="row"><button id="save-my-name">Save name</button></div>
+      <div class="row"><button id="save-my-name">Save name</button><button type="button" class="secondary" data-profile="${current.memberId}" data-own-profile="${current.memberId}">Edit profile</button></div>
       <p class="muted">Shows on the standings, chat and duels. Names must be unique in the league.</p>
       <p class="error" id="my-err"></p>
     </div>`;
@@ -589,6 +591,9 @@ const LEAGUE_FILTER = [
   ['DED', 'Eredivisie'],
   ['PPL', 'Primeira Liga'],
 ];
+const draftKey = () => `stakeless.predictionDraft.${current.code}.${current.memberId}`;
+function readPredictionDraft() { try { return JSON.parse(localStorage.getItem(draftKey()) || '{}'); } catch { return {}; } }
+function writePredictionDraft(draft) { try { localStorage.setItem(draftKey(), JSON.stringify(draft)); } catch { /* private mode: selections remain in memory */ } }
 let fixtureData = null;
 function savedLeague() {
   let v = '';
@@ -607,7 +612,17 @@ function drawFixtures() {
   const { fixtures, notice, mine } = fixtureData;
   const panel = document.getElementById('panel');
   const savedPicks = new Map();
-  const mineMap = new Map((mine || []).map((p) => [p.fixtureId, p]));
+  const draft = readPredictionDraft();
+  const mineMap = new Map((mine || []).map((p) => [String(p.fixtureId), p]));
+  for (const [id, pick] of Object.entries(draft)) {
+    if (!savedPicks.has(String(id))) savedPicks.set(String(id), { competition: pick.competition || '', kickoff: pick.kickoff || '', pick: pick.pick || null, hg: pick.hg ?? '', ag: pick.ag ?? '', savedPick: null, savedHg: '', savedAg: '', locked: false });
+  }
+  for (const f of fixtures) {
+    const minePick = mineMap.get(String(f.id));
+    const p = draft[String(f.id)] || minePick;
+    const locked = Date.now() >= new Date(f.kickoff).getTime() || f.status === 'FINISHED';
+    savedPicks.set(String(f.id), { competition: f.competition, kickoff: f.kickoff, pick: p?.pick || null, hg: p?.hg ?? '', ag: p?.ag ?? '', savedPick: minePick?.pick || null, savedHg: minePick?.hg ?? '', savedAg: minePick?.ag ?? '', locked });
+  }
   if (!fixtures.length) {
     panel.innerHTML = '<div class="empty"><b>Quiet on the pitch</b><span>No fixtures this week. The fixtures always come back round, so check again closer to the weekend.</span></div>';
     return;
@@ -616,13 +631,16 @@ function drawFixtures() {
   const shown = league ? fixtures.filter((f) => f.competition === league) : fixtures;
   const leagueName = (LEAGUE_FILTER.find(([code]) => code === league) || [])[1] || '';
   const picker = `<div class="league-filter"><label for="league-filter">League</label><select id="league-filter" aria-label="Filter fixtures by league">${LEAGUE_FILTER.map(([code, name]) => `<option value="${code}"${code === league ? ' selected' : ''}>${esc(name)}</option>`).join('')}</select></div>`;
+  const otherDrafts = Object.entries(draft).filter(([id, p]) => !fixtures.some((f) => String(f.id) === id) && p?.pick);
   const cards = shown.length ? shown.map((f) => {
     const { local, wat } = fmtKick(f.kickoff);
-    const p = mineMap.get(f.id);
+    const minePick = mineMap.get(String(f.id));
+    const savedDraft = draft[String(f.id)];
+    const p = savedDraft || minePick;
     const locked = Date.now() >= new Date(f.kickoff).getTime();
     const finished = f.status === 'FINISHED';
     const pickLabel = { H: f.home, D: 'Draw', A: f.away };
-    savedPicks.set(f.id, { pick: p?.pick || null, hg: p?.hg ?? '', ag: p?.ag ?? '', savedPick: p?.pick || null, savedHg: p?.hg ?? '', savedAg: p?.ag ?? '', locked: locked || finished });
+    savedPicks.set(f.id, { competition: f.competition, kickoff: f.kickoff, pick: p?.pick || null, hg: p?.hg ?? '', ag: p?.ag ?? '', savedPick: minePick?.pick || null, savedHg: minePick?.hg ?? '', savedAg: minePick?.ag ?? '', locked: locked || finished });
     const board = finished
       ? `<div class="fx-score" aria-label="Full time ${esc(f.homeScore)} to ${esc(f.awayScore)}">${esc(f.homeScore)}<i>-</i>${esc(f.awayScore)}</div>`
       : `<div class="fx-chip"><span>${esc(wat)}</span><small>${locked ? 'locked' : 'kick off'}</small></div>`;
@@ -676,32 +694,25 @@ function drawFixtures() {
       const btn = document.getElementById('save-all');
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
-        // Client-side mirror of the server cap: max 2 picks per league per game day (kickoff date, UTC).
+        // All leagues contribute to one draft. Validate the complete draft, including existing saved picks.
         const fxById = new Map(fixtureData.fixtures.map((f) => [String(f.id), f]));
-        const dayKey = (f) => new Date(f.kickoff).toISOString().slice(0, 10);
-        const perKey = new Map();
+        const effective = { ...draft };
         for (const [fid, rr] of savedPicks.entries()) {
-          const picked = !rr.locked && (rr.pick !== rr.savedPick || String(rr.hg) !== String(rr.savedHg) || String(rr.ag) !== String(rr.savedAg))
-            ? !!rr.pick
-            : !!rr.savedPick;
+          if (rr.pick) effective[String(fid)] = { fixtureId: fid, pick: rr.pick, hg: rr.hg, ag: rr.ag };
+          else delete effective[String(fid)];
+        }
+        const byDay = new Map();
+        for (const [fid, p] of Object.entries(effective)) {
           const f = fxById.get(String(fid));
-          if (!picked || !f) continue;
-          const k = `${f.competition}|${dayKey(f)}`;
-          perKey.set(k, (perKey.get(k) || 0) + 1);
+          if (!f || !p?.pick) continue;
+          const k = `${f.competition}|${new Date(f.kickoff).toISOString().slice(0, 10)}`;
+          byDay.set(k, (byDay.get(k) || 0) + 1);
         }
-        for (const [, n] of perKey) {
-          if (n > 2) throw new Error('max 2 picks per league per day');
-        }
-        // Removals go first, so un-ticking one game frees its daily slot before a new pick is saved.
-        for (const [fid, rr] of changed) {
-          if (rr.pick) continue;
-          if (rr.savedPick) { await api(`/api/rooms/${current.code}/unpredict`, { memberId: current.memberId, fixtureId: fid }); continue; }
-          if (rr.hg !== '' || rr.ag !== '') throw new Error('Pick a winner or draw for every selected game.');
-        }
-        for (const [fid, rr] of changed) {
-          if (!rr.pick) continue;
-          await api(`/api/rooms/${current.code}/predict`, { memberId: current.memberId, fixtureId: fid, pick: rr.pick, hg: rr.hg, ag: rr.ag });
-        }
+        if ([...byDay.values()].some((n) => n > 2)) throw new Error('Maximum 2 selections per league per matchday. Remove one pick before saving.');
+        writePredictionDraft(effective);
+        const picks = Object.entries(effective).map(([fixtureId, p]) => ({ fixtureId, pick: p.pick, hg: p.hg, ag: p.ag }));
+        await api(`/api/rooms/${current.code}/save-all`, { memberId: current.memberId, picks });
+        localStorage.removeItem(draftKey());
         await renderFixtures();
       } catch (e) {
         err.textContent = e.message;
@@ -716,17 +727,17 @@ function drawFixtures() {
       // Tapping the side that is already selected un-ticks it (and clears its exact score).
       const wasOn = row.pick === b.dataset.pick;
       row.pick = wasOn ? null : b.dataset.pick;
-      if (wasOn) {
-        row.hg = ''; row.ag = '';
-        card.querySelectorAll('[data-hg],[data-ag]').forEach((inp) => { inp.value = ''; });
-      }
+      if (wasOn) { row.hg = ''; row.ag = ''; card.querySelectorAll('[data-hg],[data-ag]').forEach((inp) => { inp.value = ''; }); }
+      if (row.pick) draft[fid] = { fixtureId: fid, pick: row.pick, hg: row.hg, ag: row.ag, competition: row.competition, kickoff: row.kickoff };
+      else delete draft[fid];
+      writePredictionDraft(draft);
       card.querySelectorAll('[data-pick]').forEach((x) => x.classList.toggle('on', !wasOn && x === b));
       refreshBar();
     });
     const hg = card.querySelector('[data-hg]');
     const ag = card.querySelector('[data-ag]');
-    if (hg) hg.oninput = () => { row.hg = hg.value; refreshBar(); };
-    if (ag) ag.oninput = () => { row.ag = ag.value; refreshBar(); };
+    if (hg) hg.oninput = () => { row.hg = hg.value; if (row.pick) draft[fid] = { fixtureId: fid, pick: row.pick, hg: row.hg, ag: row.ag, competition: row.competition, kickoff: row.kickoff }; writePredictionDraft(draft); refreshBar(); };
+    if (ag) ag.oninput = () => { row.ag = ag.value; if (row.pick) draft[fid] = { fixtureId: fid, pick: row.pick, hg: row.hg, ag: row.ag, competition: row.competition, kickoff: row.kickoff }; writePredictionDraft(draft); refreshBar(); };
   });
   refreshBar();
 }
@@ -735,7 +746,7 @@ async function renderStandings() {
   const { standings } = await api(`/api/rooms/${current.code}/standings`);
   lastStandings = standings;
   const rows = standings.map((s, i) => `<tr>
-    <td>${i + 1}</td><td><span class="h2h-link" data-h2h="${s.memberId}" data-name="${esc(s.name)}">${esc(s.name)}${s.memberId === current.memberId ? ' (you)' : ''}</span>${s.weekLeader ? ' <span class="mvp" title="Weekly MVP">MVP</span>' : ''} ${streakBadge(s.streak)}</td>
+    <td>${i + 1}</td><td><span class="standing-player"><img class="profile-avatar-small" src="${esc(s.avatarUrl || DEFAULT_AVATAR)}" alt="" onerror="this.onerror=null;this.src='${DEFAULT_AVATAR}'"><span class="h2h-link" data-profile="${s.memberId}"${s.memberId === current.memberId ? ` data-own-profile="${current.memberId}"` : ''} data-h2h="${s.memberId}" data-name="${esc(s.name)}">${esc(s.name)}${s.memberId === current.memberId ? ' (you)' : ''}</span></span>${s.weekLeader ? ' <span class="mvp" title="Weekly MVP">MVP</span>' : ''} ${streakBadge(s.streak)}</td>
     <td><strong>${s.points}</strong></td><td>${s.correct}</td><td>${s.exact}</td><td>${s.streak}</td><td>${s.bestStreak}</td></tr>`).join('');
   panel.querySelectorAll('[data-h2h]').forEach((el) => {
     el.onclick = async () => {
@@ -752,8 +763,8 @@ async function renderStandings() {
   const recent = standings.flatMap((s) => s.recent.map((p) => ({ name: s.name, p }))).slice(0, 10);
   document.getElementById('panel').innerHTML = `
     <div id="h2h-box"></div>
-    <div class="card" style="overflow-x:auto">
-      <table><thead><tr><th>#</th><th>Player</th><th>Pts</th><th>Right</th><th>Exact</th><th>Current streak</th><th>Best streak</th></tr></thead>
+    <div class="card standings-card" style="overflow-x:auto">
+      <table class="standings-table"><thead><tr><th>#</th><th>Player</th><th>Pts</th><th>Right</th><th>Exact</th><th>Current streak</th><th>Best streak</th></tr></thead>
       <tbody>${rows}</tbody></table>
     </div>
     <div class="card share-card">
@@ -1710,12 +1721,21 @@ async function renderMine() {
   const byId = new Map(fixtures.map((f) => [f.id, f]));
   const panel = document.getElementById('panel');
   if (!mine.length) { panel.innerHTML = '<div class="empty"><b>No picks yet</b><span>Head to Fixtures and make your first call. Future you will want the receipts.</span></div>'; return; }
-  panel.innerHTML = mine.map((p) => {
+    const groups = new Map();
+  const leagueLabel = (code) => (LEAGUE_FILTER.find(([key]) => key === code) || [code || 'Other'])[1];
+  for (const p of mine) {
     const f = byId.get(p.fixtureId);
-    const label = f ? `${esc(f.home)} vs ${esc(f.away)}` : esc(p.fixtureId);
+    const league = p.competition || f?.competition || 'Other';
+    const rows = groups.get(league) || [];
+    rows.push(p);
+    groups.set(league, rows);
+  }
+  panel.innerHTML = [...groups.entries()].sort(([a],[b]) => leagueLabel(a).localeCompare(leagueLabel(b))).map(([league, rows]) => `<section class="prediction-group"><h3>${esc(leagueLabel(league))}</h3>${rows.map((p) => {
+    const f = byId.get(p.fixtureId);
+    const label = f ? `${esc(f.home)} vs ${esc(f.away)}` : p.home ? `${esc(p.home)} vs ${esc(p.away)}` : esc(p.fixtureId);
     const status = p.settled ? `settled · ${p.points} pts` : (f && Date.now() >= new Date(f.kickoff).getTime() ? 'locked' : 'pending');
     return `<div class="card"><h3 style="margin-bottom:4px">${label}</h3><div class="muted">pick ${esc(p.pick)}${p.hg != null ? ` (${p.hg}-${p.ag})` : ''} · ${status}</div></div>`;
-  }).join('');
+  }).join('')}</section>`).join('');
 }
 
 loadHouseAd();
