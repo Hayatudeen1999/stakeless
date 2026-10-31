@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import { createRoom } from './server/rooms.js';
+import { data } from './server/store.js';
+import { validateProfile, validateSocialUrl, updateProfile, profileForMember } from './server/profiles.js';
+let passed=0; const ok=(label,fn)=>{fn();passed++;console.log('PASS',label)};
+ok('valid profile fields and full social URLs',()=>{const p=validateProfile({displayName:'  A  Player ',bio:'hello',social:{x:'https://x.com/a',tiktok:'https://www.tiktok.com/@a',facebook:'https://facebook.com/a'}});assert.equal(p.displayName,'A Player');assert.equal(p.bio,'hello');assert.equal(p.social.x,'https://x.com/a');});
+ok('bio limit enforced',()=>assert.throws(()=>validateProfile({displayName:'A',bio:'x'.repeat(141)}),/140/));
+ok('blank and overlong names rejected',()=>{assert.throws(()=>validateProfile({displayName:'  '}),/Display name/);assert.throws(()=>validateProfile({displayName:'x'.repeat(33)}),/Display name/)});
+ok('social host, protocol and profile path validated',()=>{assert.throws(()=>validateSocialUrl('x','https://evil.example/a'),/valid x/);assert.throws(()=>validateSocialUrl('x','http://x.com/a'),/valid x/);assert.throws(()=>validateSocialUrl('facebook','https://facebook.com/'),/valid facebook/)});
+const {code,memberId}=createRoom({name:'Profile QA',playerName:'Original'});const roomsBefore=JSON.stringify(data().rooms);const predictionsBefore=JSON.stringify(data().predictions);
+ok('new member gets safe football avatar fallback',()=>{assert.equal(profileForMember(data().rooms[code].members[0]).displayName,'Original');assert.equal(profileForMember(data().rooms[code].members[0]).avatarUrl,null)});
+ok('profile cannot be edited as another member',()=>assert.rejects(()=>updateProfile(memberId,{memberId:memberId+1,displayName:'Nope'}),/own profile/));
+const png='iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGNUOhrHwMDAxMDAwMDAAAAPKgFJfmW4WwAAAABJRU5ErkJggg==';
+const saved=await updateProfile(memberId,{memberId,displayName:'Profile Name',bio:'A bio',social:{x:'https://x.com/a'},avatarData:'data:image/png;base64,'+png});
+ok('profile saved, avatar resized and stored, room/prediction records preserved',()=>{assert.equal(saved.displayName,'Profile Name');assert.match(saved.avatarUrl,/^\/uploads\/profiles\//);assert.equal(data().rooms[code].members[0].name,'Original');assert.equal(JSON.stringify(data().rooms),roomsBefore);assert.equal(JSON.stringify(data().predictions),predictionsBefore);assert.ok(data().profiles[String(memberId)]);});
+console.log(`${passed} profile checks passed`);
