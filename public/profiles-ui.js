@@ -34,12 +34,12 @@ async function editProfile(targetId, memberId) {
   if (!modal) return;
   const p = await getProfile(targetId);
   const dialog = modal.querySelector('.profile-dialog');
-  dialog.innerHTML = `<button type="button" class="profile-close" aria-label="Close">×</button><h2>Edit profile</h2><label>Display name<input id="profile-name" maxlength="32" required value="${esc(p.displayName)}"></label><label>Bio <span class="muted">(max 140)</span><textarea id="profile-bio" maxlength="140" rows="4">${esc(p.bio)}</textarea></label><label>Profile picture <span class="muted">(PNG, JPG or WebP, max 2 MB)</span><input id="profile-image" type="file" accept="image/png,image/jpeg,image/webp"></label><img class="profile-avatar-preview" src="${esc(p.avatarUrl || DEFAULT_AVATAR)}" alt="Profile picture preview"><label>X profile URL<input id="profile-x" type="url" placeholder="https://x.com/yourname" value="${esc(p.social?.x || '')}"></label><label>TikTok profile URL<input id="profile-tiktok" type="url" placeholder="https://www.tiktok.com/@yourname" value="${esc(p.social?.tiktok || '')}"></label><label>Facebook profile URL<input id="profile-facebook" type="url" placeholder="https://www.facebook.com/yourname" value="${esc(p.social?.facebook || '')}"></label><p class="profile-error" role="status"></p><button type="button" class="profile-save">Save profile</button>`;
+  dialog.innerHTML = `<button type="button" class="profile-close" aria-label="Close">×</button><h2>Edit profile</h2><label>Display name<input id="profile-name" maxlength="32" required value="${esc(p.displayName)}"></label><label>Bio <span class="muted">(max 140)</span><textarea id="profile-bio" maxlength="140" rows="4">${esc(p.bio)}</textarea></label><label>Profile picture <span class="muted">(PNG, JPG or WebP, max 10 MB)</span><input id="profile-image" type="file" accept="image/png,image/jpeg,image/webp"></label><img class="profile-avatar-preview" src="${esc(p.avatarUrl || DEFAULT_AVATAR)}" alt="Profile picture preview"><label>X profile URL<input id="profile-x" type="url" placeholder="https://x.com/yourname" value="${esc(p.social?.x || '')}"></label><label>TikTok profile URL<input id="profile-tiktok" type="url" placeholder="https://www.tiktok.com/@yourname" value="${esc(p.social?.tiktok || '')}"></label><label>Facebook profile URL<input id="profile-facebook" type="url" placeholder="https://www.facebook.com/yourname" value="${esc(p.social?.facebook || '')}"></label><p class="profile-error" role="status"></p><button type="button" class="profile-save">Save profile</button>`;
   dialog.querySelector('.profile-close').onclick = closeProfile;
   const imageInput = dialog.querySelector('#profile-image');
   imageInput.onchange = () => {
     const file = imageInput.files?.[0];
-    if (file && file.size > 2 * 1024 * 1024) { imageInput.value = ''; dialog.querySelector('.profile-error').textContent = 'Choose an image no larger than 2 MB.'; return; }
+    if (file && file.size > 10 * 1024 * 1024) { imageInput.value = ''; dialog.querySelector('.profile-error').textContent = 'Choose an image no larger than 10 MB.'; return; }
     if (file && !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { imageInput.value = ''; dialog.querySelector('.profile-error').textContent = 'Choose a PNG, JPG or WebP image.'; return; }
     if (file) dialog.querySelector('.profile-avatar-preview').src = URL.createObjectURL(file);
   };
@@ -47,7 +47,7 @@ async function editProfile(targetId, memberId) {
     const error = dialog.querySelector('.profile-error');
     error.textContent = '';
     const file = imageInput.files?.[0];
-    if (file && file.size > 2 * 1024 * 1024) { error.textContent = 'Choose an image no larger than 2 MB.'; return; }
+    if (file && file.size > 10 * 1024 * 1024) { error.textContent = 'Choose an image no larger than 10 MB.'; return; }
     if (file && !['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { error.textContent = 'Choose a PNG, JPG or WebP image.'; return; }
     const body = { memberId: Number(memberId), displayName: dialog.querySelector('#profile-name').value, bio: dialog.querySelector('#profile-bio').value, social: { x: dialog.querySelector('#profile-x').value, tiktok: dialog.querySelector('#profile-tiktok').value, facebook: dialog.querySelector('#profile-facebook').value } };
     if (file) body.avatarData = `data:${file.type};base64,${await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result).split(',')[1]); r.onerror = reject; r.readAsDataURL(file); })}`;
